@@ -32,12 +32,24 @@ async function askOnce(payload) {
   return data;
 }
 
-chrome.contextMenus.onClicked.addListener(async (info) => {
+// content.js gửi { type: "ask", payload } → trả về { ok, data } hoặc { ok: false, error }
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type !== "ask") return;
+  askOnce(msg.payload)
+    .then((data) => sendResponse({ ok: true, data }))
+    .catch((e) => sendResponse({ ok: false, error: e.message }));
+  return true; // giữ kênh mở cho câu trả lời bất đồng bộ
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "ask-ai" || !info.selectionText) return;
   try {
-    const data = await askOnce({ selection: info.selectionText });
-    console.log(`[Highlight AI] (${data.provider})`, data.answer);
-  } catch (e) {
-    console.error("[Highlight AI]", e.message);
+    // Nhờ content script trong đúng frame mở popup tại vùng chọn
+    await chrome.tabs.sendMessage(tab.id, { type: "open-from-menu", text: info.selectionText },
+      { frameId: info.frameId ?? 0 });
+  } catch {
+    // Không có content script (PDF, tab mở trước khi cài extension...) → in ra console
+    const data = await askOnce({ selection: info.selectionText }).catch((e) => ({ answer: e.message }));
+    console.log("[Highlight AI]", data.answer);
   }
 });

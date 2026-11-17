@@ -44,7 +44,8 @@ curl -X POST http://127.0.0.1:8765/ask -H "Content-Type: application/json" \
 4. Bấm icon Highlight AI trên thanh công cụ → trang cài đặt → dán token → **Kiểm tra kết nối**.
 5. Bôi đen text bất kì, chuột phải → **Hỏi AI**.
 
-Ở M3 câu trả lời mới chỉ in ra console: trong `chrome://extensions` bấm link **service worker** của extension để xem.
+Bôi đen xong sẽ hiện nút **✦ Hỏi AI** ngay dưới vùng chọn; bấm vào để mở popup trả lời.
+Tab đã mở từ trước khi cài extension cần tải lại trang (F5) thì nút mới xuất hiện.
 Mỗi lần sửa code extension, bấm nút tải lại (↻) ở thẻ extension.
 
 ## Cấu trúc
