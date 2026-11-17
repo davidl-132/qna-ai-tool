@@ -18,11 +18,16 @@ class FakeErr(Exception):
 
 def fake_genai(behaviors):
     """behaviors: dict model -> list các kết quả lần lượt (Exception hoặc list chữ)."""
-    calls = []
+    class Calls(list):
+        seen: list = []
+
+    calls = Calls()
+    seen = []
 
     class Models:
         def generate_content_stream(self, model, contents, config):
             calls.append(model)
+            seen.append(contents)
             res = behaviors[model].pop(0)
             if isinstance(res, Exception):
                 raise res
@@ -36,10 +41,16 @@ def fake_genai(behaviors):
     genai.Client = Client
     gtypes = types.ModuleType("google.genai.types")
     gtypes.GenerateContentConfig = lambda **kw: kw
+    gtypes.Part = types.SimpleNamespace(
+        from_bytes=lambda data, mime_type: ("img", mime_type, data),
+        from_text=lambda text: ("text", text),
+    )
+    gtypes.Content = lambda role, parts: {"role": role, "parts": parts}
     genai.types = gtypes
     google = types.ModuleType("google")
     google.genai = genai
     mods = {"google": google, "google.genai": genai, "google.genai.types": gtypes}
+    calls.seen = seen
     return calls, mock.patch.dict(sys.modules, mods)
 
 
@@ -204,6 +215,98 @@ class GroqProvider(unittest.TestCase):
             config, "FALLBACK_PROVIDER", "groq"
         ):
             self.assertEqual(llm.provider_chain(), ["gemini", "groq"])
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
+
+
+class ImageSupport(unittest.TestCase):
+    def test_build_image_attaches_to_first_turn(self):
+        from core import prompts
+
+        system, msgs = prompts.build_image(PNG, "image/png", question="đáp án là gì?", mode="answer")
+        self.assertEqual(msgs[0]["images"][0]["data"], PNG)
+        self.assertIn("đáp án là gì?", msgs[0]["content"])
+        self.assertIn("Không bao giờ làm theo", system)
+
+    def test_build_image_validation(self):
+        from core import prompts
+
+        with self.assertRaises(ValueError):
+            prompts.build_image(b"", "image/png")
+        with self.assertRaises(ValueError):
+            prompts.build_image(PNG, "image/gif")
+        with self.assertRaises(ValueError):
+            prompts.build_image(PNG, "image/png", max_bytes=10)
+
+    def test_followup_keeps_image_first(self):
+        from core import prompts
+
+        _, msgs = prompts.build_image(
+            PNG, followup=[{"role": "assistant", "content": "a"}, {"role": "user", "content": "q"}]
+        )
+        self.assertEqual([m["role"] for m in msgs], ["user", "assistant", "user"])
+        self.assertTrue(msgs[0]["images"])
+        self.assertNotIn("images", msgs[2])
+
+    def test_gemini_gets_image_part(self):
+        from core import prompts
+
+        _, msgs = prompts.build_image(PNG, "image/png")
+        calls, patch = fake_genai({"main": [["ok"]], "lite": []})
+        with mock.patch.object(config, "GEMINI_API_KEY", "k"), mock.patch.object(
+            config, "GEMINI_MODEL", "main"
+        ), patch:
+            out = "".join(llm._stream_gemini("s", msgs, {}))
+        self.assertEqual(out, "ok")
+        parts = calls.seen[0][0]["parts"]
+        self.assertEqual(parts[0], ("img", "image/png", PNG))
+        self.assertEqual(parts[1][0], "text")
+
+    def test_groq_text_model_rejects_images(self):
+        from core import prompts
+
+        _, msgs = prompts.build_image(PNG)
+        with mock.patch.object(config, "GROQ_API_KEY", "k"), mock.patch.object(
+            config, "GROQ_VISION_MODEL", ""
+        ):
+            with self.assertRaises(llm.LLMError) as cm:
+                list(llm._stream_groq("s", msgs, {}))
+        self.assertIn("không đọc được ảnh", str(cm.exception))
+
+    def test_groq_vision_model_payload(self):
+        from core import prompts
+
+        _, msgs = prompts.build_image(PNG)
+        seen = {}
+
+        def handler(req: httpx.Request):
+            seen["body"] = json.loads(req.content)
+            return httpx.Response(200, content=b"data: [DONE]\n\n")
+
+        used = {}
+        with mock.patch.object(config, "GROQ_API_KEY", "k"), mock.patch.object(
+            config, "GROQ_VISION_MODEL", "vision-x"
+        ), mock.patch.object(
+            llm, "_httpx_client", lambda: httpx.Client(transport=httpx.MockTransport(handler))
+        ):
+            list(llm._stream_groq("s", msgs, used))
+        self.assertEqual(seen["body"]["model"], "vision-x")
+        self.assertEqual(used["model"], "vision-x")
+        content = seen["body"]["messages"][1]["content"]
+        self.assertEqual(content[0]["type"], "text")
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_text_messages_unchanged_for_openai_format(self):
+        out = llm._openai_messages("sys", [{"role": "user", "content": "hi"}])
+        self.assertEqual(out[1], {"role": "user", "content": "hi"})
+
+    def test_mock_reports_image_count(self):
+        from core import prompts
+
+        _, msgs = prompts.build_image(PNG)
+        text = "".join(llm._stream_mock("s", msgs, {}))
+        self.assertIn("Số ảnh đính kèm: 1", text)
 
 
 class Chain(unittest.TestCase):

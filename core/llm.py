@@ -6,6 +6,7 @@
 Nếu nhà cung cấp chính lỗi TRƯỚC khi kịp trả chữ nào (hết quota 429, sai key, mất mạng...),
 tự động chuyển sang nhà cung cấp dự phòng.
 """
+import base64
 import json
 import logging
 import re
@@ -40,6 +41,15 @@ def _error_code(e: Exception) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _short(e: Exception, limit: int = 160) -> str:
+    """Rút gọn thông báo lỗi dài (JSON của Google) cho dễ đọc."""
+    text = " ".join(str(e).split())
+    m = re.search(r"'message': '(.*?)'", text)
+    if m:
+        text = f"{_error_code(e) or ''} {m.group(1)}".strip()
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 def _gemini_models() -> list[str]:
     models = [config.GEMINI_MODEL]
     models += [m for m in config.GEMINI_FALLBACK_MODELS if m not in models]
@@ -53,11 +63,12 @@ def _stream_gemini(system: str, messages: list[dict], used: dict) -> Iterator[st
     from google.genai import types
 
     client = genai.Client(api_key=config.GEMINI_API_KEY)
-    contents = [
-        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
-        for m in messages
-    ]
-    last: Exception | None = None
+    contents = []
+    for m in messages:
+        parts = [types.Part.from_bytes(data=i["data"], mime_type=i["mime"]) for i in m.get("images", [])]
+        parts.append(types.Part.from_text(text=m["content"]))
+        contents.append(types.Content(role="model" if m["role"] == "assistant" else "user", parts=parts))
+    tried: list[str] = []  # lý do lỗi của TỪNG model, để thông báo cho rõ
     for model in _gemini_models():
         for attempt in range(config.GEMINI_RETRIES + 1):
             started = False
@@ -75,13 +86,17 @@ def _stream_gemini(system: str, messages: list[dict], used: dict) -> Iterator[st
                         yield chunk.text
                 if started:
                     return
-                last = LLMError(f"{model} không trả về nội dung")
+                tried.append(f"{model}: không trả về nội dung")
                 break  # model này trả rỗng -> sang model kế
             except Exception as e:  # noqa: BLE001
                 if started:
                     raise  # đã có chữ gửi đi, không thử lại được
-                last = e
                 code = _error_code(e)
+                reason = _short(e)
+                if tried and tried[-1].startswith(f"{model}:"):
+                    tried[-1] = f"{model}: {reason}"  # cùng model, ghi đè lần thử trước
+                else:
+                    tried.append(f"{model}: {reason}")
                 if code in (400, 401, 403):
                     raise LLMError(f"{model}: {e}") from e  # sai key/quyền: dừng luôn
                 if code == 404:
@@ -93,7 +108,7 @@ def _stream_gemini(system: str, messages: list[dict], used: dict) -> Iterator[st
                     _sleep(delay)
                 else:
                     log.warning("Gemini %s vẫn lỗi %s, đổi model", model, code)
-    raise LLMError(f"Gemini quá tải/lỗi sau khi thử {', '.join(_gemini_models())}: {last}")
+    raise LLMError("Gemini lỗi ở mọi model đã thử → " + "; ".join(tried))
 
 
 def _httpx_client():
@@ -121,6 +136,25 @@ def _parse_openai_sse(lines: Iterable[str]) -> Iterator[str]:
                 yield text
 
 
+def _has_images(messages: list[dict]) -> bool:
+    return any(m.get("images") for m in messages)
+
+
+def _openai_messages(system: str, messages: list[dict]) -> list[dict]:
+    out = [{"role": "system", "content": system}]
+    for m in messages:
+        imgs = m.get("images")
+        if not imgs:
+            out.append({"role": m["role"], "content": m["content"]})
+            continue
+        content = [{"type": "text", "text": m["content"]}]
+        for i in imgs:
+            b64 = base64.b64encode(i["data"]).decode("ascii")
+            content.append({"type": "image_url", "image_url": {"url": f"data:{i['mime']};base64,{b64}"}})
+        out.append({"role": m["role"], "content": content})
+    return out
+
+
 def _stream_openai_compat(label: str, key: str, base_url: str, model: str,
                           system: str, messages: list[dict], used: dict) -> Iterator[str]:
     """Gọi API kiểu OpenAI (xAI, Groq...) bằng httpx, không cần gói `openai`."""
@@ -128,9 +162,10 @@ def _stream_openai_compat(label: str, key: str, base_url: str, model: str,
         raise LLMError(f"Thiếu API key của {label} trong .env")
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": system}, *messages],
+        "messages": _openai_messages(system, messages),
         "stream": True,
     }
+    used["model"] = model
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     url = base_url.rstrip("/") + "/chat/completions"
     with _httpx_client() as client:
@@ -152,8 +187,13 @@ def _stream_grok(system: str, messages: list[dict], used: dict) -> Iterator[str]
 def _stream_groq(system: str, messages: list[dict], used: dict) -> Iterator[str]:
     if not config.GROQ_API_KEY:
         raise LLMError("Thiếu GROQ_API_KEY trong .env")
+    model = config.GROQ_MODEL
+    if _has_images(messages):
+        if not config.GROQ_VISION_MODEL:
+            raise LLMError("Groq đang dùng model chữ, không đọc được ảnh (đặt GROQ_VISION_MODEL để bật)")
+        model = config.GROQ_VISION_MODEL
     yield from _stream_openai_compat(
-        "Groq", config.GROQ_API_KEY, config.GROQ_BASE_URL, config.GROQ_MODEL, system, messages, used
+        "Groq", config.GROQ_API_KEY, config.GROQ_BASE_URL, model, system, messages, used
     )
 
 
@@ -167,6 +207,7 @@ def _stream_mock(system: str, messages: list[dict], used: dict) -> Iterator[str]
         "**[mock]** Câu trả lời thử nghiệm, không gọi AI thật.\n\n"
         f"- Yêu cầu: {task}…\n"
         f"- Có context xung quanh: {'có' if '<context>' in first else 'không'}\n"
+        f"- Số ảnh đính kèm: {sum(len(m.get('images', [])) for m in messages)}\n"
         f"- Số lượt trong hội thoại: {len(messages)}\n"
         f"- Câu cuối: `{messages[-1]['content'][-60:].strip()}`"
     )
