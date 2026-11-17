@@ -4,12 +4,12 @@ Bôi đen text bất kì trên trang web → AI giải thích / dịch / tóm t�
 
 - **Chrome extension (JS)** chỉ lo giao diện: nút nổi, popup, menu chuột phải.
 - **Python backend (FastAPI)** lo toàn bộ logic AI, chạy trên máy bạn ở `127.0.0.1`.
-- **Gemini** là nhà cung cấp mặc định, **Grok** tự động dự phòng khi Gemini lỗi (hết quota, sai key...).
+- **Gemini** là nhà cung cấp mặc định, **Groq** (hoặc Grok của xAI) tự động dự phòng khi Gemini lỗi (hết quota, sai key...).
 - API key chỉ nằm trong `.env` phía Python, không bao giờ nằm trong trình duyệt.
 
 ```
 Bôi đen ─► content.js ──port──► background.js ──HTTP + token──► api/main.py ──► core/ ──► Gemini
-                ▲                                                                        └─► Grok (dự phòng)
+                ▲                                                                        └─► Groq (dự phòng)
                 └────────────────────── chữ hiện dần (SSE) ◄─────────────────────────────┘
 ```
 
@@ -93,7 +93,7 @@ python -m unittest -v     # chạy với provider mock, không tốn quota
 
 ```
 core/          logic AI dùng chung (extension + desktop app sau này)
-  llm.py         gọi Gemini / Grok / mock, tự chuyển dự phòng
+  llm.py         gọi Gemini / Groq / Grok / mock, tự chuyển dự phòng
   prompts.py     prompt theo mode, chống prompt injection
   context.py     làm sạch, cắt ngắn text
   history.py     lịch sử SQLite
