@@ -36,10 +36,22 @@ curl -X POST http://127.0.0.1:8765/ask -H "Content-Type: application/json" \
      -H "X-Local-Token: <token>" -d '{"selection": "TCP handshake", "mode": "explain"}'
 ```
 
+## M3: cài extension vào Chrome
+
+1. Chạy server: `python -m api.main`
+2. Mở `chrome://extensions`, bật **Developer mode** (góc phải trên).
+3. Bấm **Load unpacked**, chọn thư mục `extension/`.
+4. Bấm icon Highlight AI trên thanh công cụ → trang cài đặt → dán token → **Kiểm tra kết nối**.
+5. Bôi đen text bất kì, chuột phải → **Hỏi AI**.
+
+Ở M3 câu trả lời mới chỉ in ra console: trong `chrome://extensions` bấm link **service worker** của extension để xem.
+Mỗi lần sửa code extension, bấm nút tải lại (↻) ở thẻ extension.
+
 ## Cấu trúc
 
 ```
 core/       logic AI dùng chung (extension + desktop app sau này)
 api/        FastAPI server cho extension
+extension/  Chrome extension (Manifest V3)
 scripts/    công cụ chạy thử trong terminal
 ```

@@ -58,6 +58,12 @@ def health():
     return {"ok": True, "providers": llm.provider_chain()}
 
 
+@app.get("/auth-check", dependencies=[Depends(require_token)])
+def auth_check():
+    """Trang Options dùng để kiểm tra token đúng hay sai."""
+    return {"ok": True}
+
+
 @app.post("/ask", dependencies=[Depends(require_token)])
 def ask(req: AskRequest):
     """Trả lời một lần (không stream)."""
