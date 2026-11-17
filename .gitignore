@@ -1,0 +1,18 @@
+# Bí mật
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Dữ liệu cục bộ
+data/
+*.db
+
+# Hệ điều hành / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
