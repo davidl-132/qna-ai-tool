@@ -61,8 +61,15 @@ def _stream_mock(system: str, messages: list[dict]) -> Iterator[str]:
     """Nhà cung cấp giả: dùng để test khi chưa có mạng/key."""
     import time
 
-    last = messages[-1]["content"]
-    text = f"[mock] Đã nhận {len(last)} ký tự. Đây là câu trả lời thử nghiệm."
+    first = messages[0]["content"]
+    task = first.rsplit("Yêu cầu:", 1)[-1].strip()[:40]
+    text = (
+        "**[mock]** Câu trả lời thử nghiệm, không gọi AI thật.\n\n"
+        f"- Yêu cầu: {task}…\n"
+        f"- Có context xung quanh: {'có' if '<context>' in first else 'không'}\n"
+        f"- Số lượt trong hội thoại: {len(messages)}\n"
+        f"- Câu cuối: `{messages[-1]['content'][-60:].strip()}`"
+    )
     for word in text.split(" "):
         time.sleep(0.03)
         yield word + " "

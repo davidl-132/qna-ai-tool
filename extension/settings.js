@@ -4,7 +4,17 @@ const DEFAULT_SETTINGS = {
   token: "",
   mode: "explain",
   lang: "vi",
+  excludedSites: "", // mỗi dòng một tên miền, ví dụ: vietcombank.com.vn
 };
+
+// true nếu `hostname` thuộc danh sách trang bị loại trừ (tính cả tên miền con)
+function isExcluded(hostname, excludedSites) {
+  return excludedSites
+    .split(/[\s,]+/)
+    .map((d) => d.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+    .filter(Boolean)
+    .some((d) => hostname === d || hostname.endsWith("." + d));
+}
 
 async function getSettings() {
   const saved = await chrome.storage.local.get(Object.keys(DEFAULT_SETTINGS));

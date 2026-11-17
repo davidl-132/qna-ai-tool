@@ -11,22 +11,22 @@ import json
 from typing import Literal
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from core import config, context, llm, prompts
+from core import config, context, history, llm, prompts
 
 from .security import ensure_token, require_token
 
-app = FastAPI(title="Highlight AI", version="0.5.0")
+app = FastAPI(title="Highlight AI", version="0.6.0")
 
 # Chỉ cho phép trang của extension gọi (origin dạng chrome-extension://<id>)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "X-Local-Token"],
 )
 
@@ -75,7 +75,27 @@ def ask(req: AskRequest):
         answer = llm.ask(system, messages, info)
     except llm.LLMError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+    save_history(req, answer, info)
     return {"answer": answer, "truncated": truncated, **info}
+
+
+def save_history(req: AskRequest, answer: str, info: dict) -> None:
+    question = req.followup[-1].content if req.followup else ""
+    try:
+        history.save(req.selection[:config.MAX_SELECTION_CHARS], answer, req.mode, req.page_title,
+                     question, info.get("provider", ""), info.get("model", ""))
+    except Exception as e:  # noqa: BLE001 - lỗi lưu lịch sử không được làm hỏng câu trả lời
+        print(f"[history] không lưu được: {e}")
+
+
+@app.get("/history", dependencies=[Depends(require_token)])
+def get_history(limit: int = Query(default=20, ge=1, le=200)):
+    return {"items": history.recent(limit)}
+
+
+@app.delete("/history", dependencies=[Depends(require_token)])
+def clear_history():
+    return {"deleted": history.clear()}
 
 
 def sse(data: dict, event: str | None = None) -> str:
@@ -96,13 +116,14 @@ def ask_stream(req: AskRequest):
 
     def events():
         info: dict = {}
-        sent_meta = False
+        pieces: list[str] = []
         try:
             for piece in llm.ask_stream(system, messages, info):
-                if not sent_meta:
-                    sent_meta = True
+                if not pieces:
                     yield sse({**info, "truncated": truncated}, "meta")
+                pieces.append(piece)
                 yield sse({"t": piece})
+            save_history(req, "".join(pieces), info)
             yield sse({}, "done")
         except llm.LLMError as e:
             yield sse({"message": str(e)}, "error")

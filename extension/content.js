@@ -7,6 +7,15 @@
   let shadow = null;
   let btn = null;    // nút nổi
   let panel = null;  // popup (từ panel.js)
+  let settings = { ...DEFAULT_SETTINGS };
+
+  // Đọc cài đặt một lần, cập nhật khi người dùng đổi ở trang Options
+  getSettings().then((s) => (settings = s));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    for (const [k, v] of Object.entries(changes)) settings[k] = v.newValue;
+  });
+  const excludedHere = () => isExcluded(location.hostname, settings.excludedSites || "");
 
   // ---------- Shadow DOM: CSS của trang không làm vỡ giao diện ----------
   function ensureHost() {
@@ -25,12 +34,34 @@
 
   // ---------- Lấy vùng bôi đen ----------
   function readSelection() {
+    // Không bao giờ gửi nội dung ô mật khẩu
+    const active = document.activeElement;
+    if (active?.tagName === "INPUT" && active.type === "password") return null;
+
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : "";
     if (!text || sel.rangeCount === 0) return null;
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
     if (!rect.width && !rect.height) return null;
-    return { text, rect };
+    return { text, rect, context: getContext(range, text) };
+  }
+
+  // Lấy đoạn văn xung quanh vùng chọn (khoảng 1500 ký tự) để AI hiểu đúng ngữ cảnh
+  const BLOCK = "p, li, td, th, dd, blockquote, pre, h1, h2, h3, h4, h5, h6, article, section, main, div";
+  function getContext(range, text, limit = 1500) {
+    let node = range.commonAncestorContainer;
+    if (node.nodeType !== Node.ELEMENT_NODE) node = node.parentElement;
+    let block = node?.closest(BLOCK) || document.body;
+    // Leo lên khối cha cho tới khi đủ dài hơn hẳn phần bôi đen
+    while (block.parentElement && block !== document.body && (block.innerText || "").length < text.length + 300) {
+      block = block.parentElement.closest(BLOCK) || document.body;
+    }
+    const full = (block.innerText || "").replace(/\s+/g, " ").trim();
+    if (full.length <= limit) return full === text ? "" : full;
+    const at = Math.max(0, full.indexOf(text.slice(0, 50)));
+    const start = Math.max(0, at - Math.floor((limit - Math.min(text.length, limit)) / 2));
+    return full.slice(start, start + limit);
   }
 
   // Đổi toạ độ màn hình → toạ độ trang (để popup cuộn theo trang)
@@ -76,7 +107,13 @@
     ensureHost();
     hideButton();
     closePanel();
-    panel = createPanel({ text: info.text, pageTitle: document.title, onClose: closePanel });
+    panel = createPanel({
+      text: info.text,
+      context: info.context || "",
+      pageTitle: document.title,
+      mode: settings.mode,
+      onClose: closePanel,
+    });
     shadow.appendChild(panel.el);
     placePanel(panel.el, info.rect);
     panel.run();
@@ -89,7 +126,7 @@
 
   // ---------- Sự kiện ----------
   document.addEventListener("mouseup", (e) => {
-    if (isInsideUI(e)) return;
+    if (isInsideUI(e) || excludedHere()) return;
     setTimeout(() => {
       const info = readSelection();
       if (info) showButton(info);

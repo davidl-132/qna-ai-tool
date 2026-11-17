@@ -11,7 +11,13 @@
     return;
   }
   document.title = `Highlight AI – ${data.selection.slice(0, 40)}`;
-  const panel = createPanel({ text: data.selection, pageTitle: data.page_title, onClose: () => window.close() });
+  const { mode } = await getSettings();
+  const panel = createPanel({
+    text: data.selection,
+    pageTitle: data.page_title,
+    mode,
+    onClose: () => window.close(),
+  });
   root.appendChild(panel.el);
   panel.run();
 })();
