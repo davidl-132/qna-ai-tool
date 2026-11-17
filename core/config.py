@@ -29,3 +29,7 @@ MAX_CONTEXT_CHARS = int(_get("MAX_CONTEXT_CHARS", "1500"))
 
 # Ngôn ngữ trả lời mặc định
 DEFAULT_LANG = _get("DEFAULT_LANG", "vi")
+
+# Server cục bộ cho extension
+PORT = int(_get("PORT", "8765"))
+LOCAL_TOKEN = _get("LOCAL_TOKEN")
