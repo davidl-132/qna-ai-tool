@@ -1,71 +1,41 @@
 # Highlight AI
 
-Bôi đen text bất kì trên trang web → AI giải thích / dịch / tóm tắt / giải bài ngay cạnh vùng chọn.
+AI trả lời cho thứ bạn đang đọc, theo 2 cách:
 
-- **Chrome extension (JS)** chỉ lo giao diện: nút nổi, popup, menu chuột phải.
-- **Python backend (FastAPI)** lo toàn bộ logic AI, chạy trên máy bạn ở `127.0.0.1`.
-- **Gemini** là nhà cung cấp mặc định, **Groq** (hoặc Grok của xAI) tự động dự phòng khi Gemini lỗi (hết quota, sai key...).
+| | Cách dùng | Mô tả | Hướng dẫn từng bước |
+|---|---|---|---|
+| 🌐 | **Extension Chrome** | Bôi đen chữ trên web → AI giải thích / dịch / tóm tắt / giải bài cạnh vùng chọn | [HUONG_DAN_EXTENSION.md](HUONG_DAN_EXTENSION.md) |
+| 📷 | **Chụp ảnh (desktop)** | Win+Shift+S ở bất kỳ đâu trên máy → AI đọc ảnh và trả lời | [HUONG_DAN_CHUP_ANH.md](HUONG_DAN_CHUP_ANH.md) |
+
+Cài đặt chung (Python, `.env`, chọn model, lỗi thường gặp, sửa prompt): xem [HUONG_DAN.md](HUONG_DAN.md).
+
+- **`core/`** chứa toàn bộ logic AI, dùng chung cho cả hai cách.
+- **Gemini** là nhà cung cấp mặc định. **Groq** (hoặc Grok của xAI) tự động dự phòng khi Gemini lỗi (quá tải, hết quota, sai key...). Gemini cũng tự thử lại và đổi model dự phòng khi gặp lỗi tạm thời.
 - API key chỉ nằm trong `.env` phía Python, không bao giờ nằm trong trình duyệt.
+- Chạy được trên máy có Application Control: chỉ dùng thư viện thuần Python (`httpx`, `ctypes`, `zlib`), không cần file DLL lạ.
 
 ```
-Bôi đen ─► content.js ──port──► background.js ──HTTP + token──► api/main.py ──► core/ ──► Gemini
-                ▲                                                                        └─► Groq (dự phòng)
-                └────────────────────── chữ hiện dần (SSE) ◄─────────────────────────────┘
+🌐 Bôi đen ─► content.js ──► background.js ──HTTP + token──► api/main.py ──┐
+                                                                            ├──► core/ ──► Gemini
+📷 Win+Shift+S ─► clipboard ─► desktop/watcher.py ─────────────────────────┘        └──► Groq (dự phòng)
 ```
 
-## Cài đặt
+## Bắt đầu nhanh
 
-### 1. Backend Python
-
-```bash
+```bat
 python -m venv .venv
-# Windows: .venv\Scripts\activate   |   macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+copy .env.example .env      :: điền GEMINI_API_KEY (và GROQ_API_KEY nếu có)
+python -m scripts.test_models      :: xem model nào dùng được → điền GEMINI_MODEL
 
-cp .env.example .env        # Windows: copy .env.example .env
-# mở .env, điền GEMINI_API_KEY (và XAI_API_KEY nếu có)
-
-python -m scripts.list_models    # xem model Gemini key của bạn dùng được → điền GEMINI_MODEL
-python -m scripts.try_core "Normalization in database" --mode explain   # thử trong terminal
+python -m api.main                 :: 🌐 extension (cần thêm bước nạp extension, xem hướng dẫn)
+python -m desktop.watcher          :: 📷 chụp ảnh
 ```
 
-Chưa có key? Đặt `PROVIDER=mock` trong `.env` để chạy thử với câu trả lời giả.
+Chưa có key? Đặt `PROVIDER=mock` và `FALLBACK_PROVIDER=` trong `.env` để chạy thử với câu trả lời giả.
 
-### 2. Chạy server
-
-```bash
-python -m api.main
-```
-
-Lần chạy đầu, server tự tạo `LOCAL_TOKEN`, ghi vào `.env` và in ra màn hình. Giữ cửa sổ này mở khi dùng extension.
-
-### 3. Cài extension vào Chrome
-
-1. Mở `chrome://extensions`, bật **Developer mode** (góc phải trên).
-2. Bấm **Load unpacked**, chọn thư mục `extension/`.
-3. Bấm icon Highlight AI trên thanh công cụ → dán token → **Kiểm tra kết nối**.
-
-## Cách dùng
-
-| Thao tác | Kết quả |
-| --- | --- |
-| Bôi đen text | Hiện nút **✦ Hỏi AI** dưới vùng chọn |
-| Bấm nút / chuột phải → **Hỏi AI** | Popup trả lời, chữ hiện dần |
-| Tab **Giải thích / Dịch / Tóm tắt / Trả lời** | Hỏi lại theo chế độ khác |
-| Ô **Hỏi tiếp** | Hỏi thêm về cùng đoạn đó, AI nhớ các lượt trước |
-| **■ Dừng**, **Copy**, **Thử lại**, phím **Esc** | Ngắt, chép, hỏi lại, đóng |
-| Trang cài đặt → **Lịch sử gần đây** | Xem các câu đã hỏi (lưu trong `data/history.db`) |
-
-Lưu ý:
-
-- Tab đã mở từ trước khi cài extension cần tải lại trang (F5).
-- **File PDF** trong Chrome: nút nổi không xuất hiện; dùng chuột phải → **Hỏi AI**, câu trả lời mở trong cửa sổ nhỏ riêng.
-- Không hoạt động ở `chrome://`, Chrome Web Store, và Google Docs/Sheets (vẽ bằng canvas).
-- Ô mật khẩu luôn bị bỏ qua. Thêm trang nhạy cảm (ngân hàng, email) vào ô **Không hiện nút trên các trang**.
-- Free tier của Gemini có thể dùng nội dung bạn gửi để cải thiện sản phẩm; đừng gửi thông tin nhạy cảm.
-- Sửa code extension xong, bấm nút tải lại (↻) ở thẻ extension trong `chrome://extensions`.
-
-## API (cho client khác, ví dụ desktop app sau này)
+## API (cho client khác)
 
 | Endpoint | Token | Mô tả |
 | --- | --- | --- |
@@ -92,9 +62,9 @@ python -m unittest -v     # chạy với provider mock, không tốn quota
 ## Cấu trúc
 
 ```
-core/          logic AI dùng chung (extension + desktop app sau này)
-  llm.py         gọi Gemini / Groq / Grok / mock, tự chuyển dự phòng
-  prompts.py     prompt theo mode, chống prompt injection
+core/          logic AI dùng chung (extension + chụp ảnh)
+  llm.py         gọi Gemini / Groq / Grok / mock, retry, đổi model, tự chuyển dự phòng, nhận ảnh
+  prompts.py     prompt cho chữ (MODES) và cho ảnh (IMAGE_MODES), chống prompt injection
   context.py     làm sạch, cắt ngắn text
   history.py     lịch sử SQLite
 api/           FastAPI server cho extension (token, CORS, SSE)
@@ -103,6 +73,12 @@ extension/     Chrome extension (Manifest V3)
   panel.js       popup trả lời (dùng chung với answer.html)
   background.js  gọi server, đọc SSE, menu chuột phải
   options.*      cài đặt + lịch sử
+desktop/       app chụp ảnh (Windows)
+  clipboard.py   đọc ảnh từ clipboard bằng ctypes, đổi sang PNG bằng zlib
+  watcher.py     theo dõi clipboard, gọi AI, in câu trả lời
 scripts/       công cụ chạy thử trong terminal
+  list_models.py   liệt kê model Gemini
+  test_models.py   thử gọi từng model xem cái nào dùng được
+  try_core.py      hỏi bằng chữ  |  try_image.py   hỏi bằng ảnh
 tests/         kiểm thử
 ```
