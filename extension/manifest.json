@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Highlight AI",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Bôi đen text → AI giải thích, dịch, tóm tắt ngay cạnh vùng chọn.",
   "permissions": [
     "contextMenus",
@@ -20,6 +20,7 @@
       ],
       "js": [
         "markdown.js",
+        "panel.js",
         "content.js"
       ],
       "all_frames": true,

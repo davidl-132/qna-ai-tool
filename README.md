@@ -34,6 +34,8 @@ Server chỉ nghe trên `127.0.0.1:8765`, mọi request phải kèm header `X-Lo
 curl http://127.0.0.1:8765/health
 curl -X POST http://127.0.0.1:8765/ask -H "Content-Type: application/json" \
      -H "X-Local-Token: <token>" -d '{"selection": "TCP handshake", "mode": "explain"}'
+
+# bản stream (SSE): thêm -N, đổi /ask thành /ask/stream
 ```
 
 ## M3: cài extension vào Chrome
@@ -46,6 +48,11 @@ curl -X POST http://127.0.0.1:8765/ask -H "Content-Type: application/json" \
 
 Bôi đen xong sẽ hiện nút **✦ Hỏi AI** ngay dưới vùng chọn; bấm vào để mở popup trả lời.
 Tab đã mở từ trước khi cài extension cần tải lại trang (F5) thì nút mới xuất hiện.
+
+Câu trả lời hiện dần (streaming). Bấm **■ Dừng** để ngắt, **Copy** để chép, **Thử lại** để hỏi lại.
+
+Trong **file PDF** mở bằng Chrome, nút nổi không xuất hiện (Chrome không cho extension chạy trong trình xem PDF).
+Hãy bôi đen → chuột phải → **Hỏi AI**: câu trả lời mở trong một cửa sổ nhỏ riêng.
 Mỗi lần sửa code extension, bấm nút tải lại (↻) ở thẻ extension.
 
 ## Cấu trúc

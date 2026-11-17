@@ -3,22 +3,24 @@
 Chạy (từ thư mục gốc dự án):
     python -m api.main
 
-Thử bằng curl:
+Thử bằng curl (thêm -N và đổi /ask thành /ask/stream để xem stream):
     curl -X POST http://127.0.0.1:8765/ask -H "Content-Type: application/json" \
          -H "X-Local-Token: <token>" -d "{\"selection\": \"TCP handshake\"}"
 """
+import json
 from typing import Literal
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from core import config, context, llm, prompts
 
 from .security import ensure_token, require_token
 
-app = FastAPI(title="Highlight AI", version="0.2.0")
+app = FastAPI(title="Highlight AI", version="0.5.0")
 
 # Chỉ cho phép trang của extension gọi (origin dạng chrome-extension://<id>)
 app.add_middleware(
@@ -74,6 +76,42 @@ def ask(req: AskRequest):
     except llm.LLMError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     return {"answer": answer, "truncated": truncated, **info}
+
+
+def sse(data: dict, event: str | None = None) -> str:
+    """Định dạng một sự kiện Server-Sent Events."""
+    head = f"event: {event}\n" if event else ""
+    return f"{head}data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+@app.post("/ask/stream", dependencies=[Depends(require_token)])
+def ask_stream(req: AskRequest):
+    """Trả lời dạng stream (SSE). Các sự kiện:
+    meta  {provider, model, truncated}  – gửi một lần khi có chữ đầu tiên
+    (mặc định) {t: "..."}             – từng đoạn chữ
+    done  {}                           – xong
+    error {message}                    – lỗi
+    """
+    system, messages, truncated = build_prompt(req)
+
+    def events():
+        info: dict = {}
+        sent_meta = False
+        try:
+            for piece in llm.ask_stream(system, messages, info):
+                if not sent_meta:
+                    sent_meta = True
+                    yield sse({**info, "truncated": truncated}, "meta")
+                yield sse({"t": piece})
+            yield sse({}, "done")
+        except llm.LLMError as e:
+            yield sse({"message": str(e)}, "error")
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 def run() -> None:

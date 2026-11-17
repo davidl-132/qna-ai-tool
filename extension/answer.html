@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Highlight AI</title>
+  <link rel="stylesheet" href="ui.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #f3f4f6; }
+    @media (prefers-color-scheme: dark) { html, body { background: #111827; } }
+    .hl-panel { position: static; width: auto; max-width: none; margin: 8px; }
+    .hl-body { max-height: calc(100vh - 220px); }
+  </style>
+</head>
+<body>
+  <!-- Cửa sổ dự phòng: dùng khi chuột phải trong PDF hoặc trang không chạy được content script -->
+  <div id="root"></div>
+  <script src="markdown.js"></script>
+  <script src="panel.js"></script>
+  <script src="answer.js"></script>
+</body>
+</html>

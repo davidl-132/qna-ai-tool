@@ -6,8 +6,7 @@
   let host = null;   // <div> gắn vào trang, chứa Shadow DOM
   let shadow = null;
   let btn = null;    // nút nổi
-  let panel = null;  // popup
-  let current = null; // { text, rect } của lần bôi đen gần nhất
+  let panel = null;  // popup (từ panel.js)
 
   // ---------- Shadow DOM: CSS của trang không làm vỡ giao diện ----------
   function ensureHost() {
@@ -59,18 +58,17 @@
   }
 
   // ---------- Popup ----------
-  function placePanel(rect) {
+  function placePanel(el, rect) {
     const width = Math.min(400, window.innerWidth - 16);
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
-    panel.style.left = `${pageX(left)}px`;
+    el.style.left = `${pageX(left)}px`;
     const spaceBelow = window.innerHeight - rect.bottom;
     if (spaceBelow < 260 && rect.top > spaceBelow) {
       // Sát mép dưới → lật popup lên phía trên vùng chọn
-      panel.classList.add("above");
-      panel.style.top = `${pageY(rect.top - 8)}px`;
+      el.classList.add("above");
+      el.style.top = `${pageY(rect.top - 8)}px`;
     } else {
-      panel.classList.remove("above");
-      panel.style.top = `${pageY(rect.bottom + 8)}px`;
+      el.style.top = `${pageY(rect.bottom + 8)}px`;
     }
   }
 
@@ -78,63 +76,15 @@
     ensureHost();
     hideButton();
     closePanel();
-    current = info;
-
-    panel = document.createElement("div");
-    panel.className = "hl-panel";
-    panel.innerHTML = `
-      <div class="hl-head">
-        <span class="hl-title">✦ Highlight AI</span>
-        <button class="hl-icon" data-act="close" title="Đóng (Esc)">✕</button>
-      </div>
-      <div class="hl-quote"></div>
-      <div class="hl-body"></div>
-      <div class="hl-foot">
-        <button class="hl-small" data-act="copy">Copy</button>
-        <span class="hl-meta"></span>
-      </div>`;
-    panel.querySelector(".hl-quote").textContent = info.text;
-    panel.querySelector('[data-act="close"]').onclick = closePanel;
-    panel.querySelector('[data-act="copy"]').onclick = copyAnswer;
-    shadow.appendChild(panel);
-    placePanel(info.rect);
-    run();
+    panel = createPanel({ text: info.text, pageTitle: document.title, onClose: closePanel });
+    shadow.appendChild(panel.el);
+    placePanel(panel.el, info.rect);
+    panel.run();
   }
 
   function closePanel() {
-    panel?.remove();
+    panel?.destroy();
     panel = null;
-  }
-
-  const $ = (sel) => panel?.querySelector(sel);
-  let answerText = "";
-
-  function setBody(html) {
-    const body = $(".hl-body");
-    if (body) body.innerHTML = html;
-  }
-
-  async function copyAnswer() {
-    if (!answerText) return;
-    await navigator.clipboard.writeText(answerText).catch(() => {});
-    const b = $('[data-act="copy"]');
-    if (b) { b.textContent = "Đã copy ✓"; setTimeout(() => (b.textContent = "Copy"), 1200); }
-  }
-
-  // ---------- Gọi AI (qua background) ----------
-  async function run() {
-    answerText = "";
-    setBody('<span class="hl-loading">Đang suy nghĩ</span>');
-    const res = await chrome.runtime.sendMessage({ type: "ask", payload: { selection: current.text } });
-    if (!panel) return;
-    if (!res?.ok) {
-      setBody(`<div class="hl-error"></div>`);
-      $(".hl-error").textContent = res?.error || "Lỗi không xác định";
-      return;
-    }
-    answerText = res.data.answer;
-    setBody(renderMarkdown(answerText));
-    $(".hl-meta").textContent = res.data.provider || "";
   }
 
   // ---------- Sự kiện ----------
