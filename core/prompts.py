@@ -15,7 +15,7 @@ MODES = {
     ),
     "summarize": "Tóm tắt nội dung được bôi đen thành 3–5 ý chính, mỗi ý một dòng gạch đầu dòng.",
     "answer": (
-        "Nếu nội dung được bôi đen là câu hỏi hoặc bài tập, hãy giải từng bước và nói vì sao. "
+        "Nếu là câu trắc nghiệm, nêu đáp án đúng ngay dòng đầu, rồi giải thích tối đa 3 ý."
         "Nếu không phải câu hỏi, hãy giải thích ngắn gọn ý nghĩa của nó."
     ),
 }
@@ -65,10 +65,7 @@ def build(selection: str, mode: str = "explain", context: str = "", page_title: 
 # ---------- Ảnh chụp màn hình (desktop app) ----------
 
 IMAGE_MODES = {
-    "answer": (
-        "Nhìn ảnh. Nếu có câu hỏi hoặc bài tập, hãy giải từng bước và nói vì sao. "
-        "Nếu không có, hãy giải thích ngắn gọn ảnh đang thể hiện điều gì."
-    ),
+    "answer": "Nhìn ảnh. Nếu là câu trắc nghiệm, nêu đáp án đúng ngay dòng đầu, rồi giải thích tối đa 3 ý.",
     "explain": (
         "Giải thích nội dung trong ảnh. Bắt đầu bằng một ví dụ đời thường dễ hiểu, "
         "sau đó giải thích chính xác. Ngắn gọn, tối đa khoảng 150 từ."
