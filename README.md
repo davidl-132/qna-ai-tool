@@ -67,6 +67,7 @@ python -m unittest -v     # chạy với provider mock, không tốn quota
 core/          logic AI dùng chung (extension + chụp ảnh)
   llm.py         gọi Gemini / Groq / Grok / mock, retry, đổi model, tự chuyển dự phòng, nhận ảnh
   prompts.py     prompt cho chữ (MODES) và cho ảnh (IMAGE_MODES), chống prompt injection
+  review.py      vòng tự kiểm tra: nháp rồi xem lại ảnh để xác nhận/sửa (dùng bởi app popup)
   context.py     làm sạch, cắt ngắn text
   history.py     lịch sử SQLite
 api/           FastAPI server cho extension (token, CORS, SSE)
@@ -79,7 +80,7 @@ desktop/       app chụp ảnh (Windows)
   clipboard.py   đọc ảnh từ clipboard bằng ctypes, đổi sang PNG bằng zlib
   watcher.py     theo dõi clipboard, gọi AI
   app.py         app popup: phím tắt + khung đáp án (python -m desktop.app)
-  controller.py  điều khiển app popup: lịch sử, ẩn/hiện, chụp + hỏi AI
+  controller.py  điều khiển app popup (kèm vòng tự kiểm tra lại đáp án): lịch sử, ẩn/hiện, chụp + hỏi AI
   popup.py       khung đáp án tkinter ở góc màn hình
   hotkeys.py     phím tắt toàn cục (RegisterHotKey)
   screen.py      chụp màn hình bằng ctypes

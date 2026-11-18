@@ -10,8 +10,9 @@ import tkinter as tk
 import tkinter.font as tkfont
 
 BG, BAR, FG, DIM = "#1e1e2e", "#2a2a3e", "#e8e8f0", "#9a9ab0"
-ACCENT, ERR = "#7aa2f7", "#f7768e"
-STATUS_TEXT = {"capturing": "📸 Đang chụp màn hình…", "asking": "⏳ Đang hỏi AI…"}
+ACCENT, ERR, OK, WARN = "#7aa2f7", "#f7768e", "#9ece6a", "#e0af68"
+# Chỉ dùng ký tự trong BMP: Tk 8.6 trên Windows hiển thị emoji ngoài BMP (📸, 🔍...) thành ô vuông hoặc báo lỗi
+STATUS_TEXT = {"capturing": "⏳ Đang chụp màn hình…", "asking": "⏳ Đang hỏi AI…", "reviewing": "⏳ Đang kiểm tra lại…"}
 
 
 class Popup:
@@ -58,6 +59,8 @@ class Popup:
         self.text.tag_configure("dim", foreground=DIM, font=(family, 9))
         self.text.tag_configure("bold", font=(family, 11, "bold"))
         self.text.tag_configure("err", foreground=ERR)
+        self.text.tag_configure("ok", foreground=OK, font=(family, 9))
+        self.text.tag_configure("warn", foreground=WARN, font=(family, 10, "bold"))
         self.text.tag_configure("status", foreground=ACCENT)
         # Chỉ cho chọn/copy, không cho gõ vào
         self.text.bind("<Key>", lambda e: None if (e.state & 0x4 and e.keysym.lower() in "ca") else "break")
@@ -149,12 +152,22 @@ class Popup:
     def render(self, entry, index: int, total: int) -> None:
         model = entry.info.get("model", "")
         title = f"Highlight AI · {index + 1}/{total}" + (f" · {model}" if model else "")
+        title += {"ok": " · ✔", "fixed": " · đã sửa"}.get(entry.review, "")
         parts: list[tuple[str, str]] = []
         if entry.size:
             parts.append((f"Ảnh {entry.size}\n", "dim"))
         if entry.text:
             parts.append((entry.text, ""))
-        if entry.status in STATUS_TEXT:
+        if entry.review == "ok":
+            parts.append(("\n\n✔ Đã kiểm tra lại: đáp án khớp.", "ok"))
+        elif entry.review == "fixed":
+            parts.append(("\n\n↻ Kiểm tra lại thấy bản trên có lỗi. Bản đã sửa:\n", "warn"))
+            parts.append((entry.fixed_text, ""))
+        elif entry.review == "unknown":
+            parts.append(("\n\n(Kiểm tra lại: không rõ kết quả, hãy tự xem lại bản trên.)", "dim"))
+        elif entry.review == "failed":
+            parts.append((f"\n\n(Không kiểm tra lại được: {entry.review_error})", "dim"))
+        if entry.status in STATUS_TEXT and not (entry.status == "reviewing" and entry.review == "fixed"):
             parts.append((("\n" if entry.text else "") + STATUS_TEXT[entry.status], "status"))
         if entry.status == "error":
             parts.append((("\n\n" if entry.text else "") + "⚠ " + entry.error, "err"))

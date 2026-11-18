@@ -27,6 +27,8 @@ def main() -> None:
     ap.add_argument("--mode", default="answer", choices=sorted(prompts.IMAGE_MODES))
     ap.add_argument("--question", default="", help="câu hỏi thêm gửi kèm mỗi ảnh chụp")
     ap.add_argument("--lang", default=config.DEFAULT_LANG)
+    ap.add_argument("--no-review", action="store_true", default=not config.AGENT_REVIEW,
+                    help="tắt vòng tự kiểm tra (chỉ 1 lượt gọi AI, nhanh hơn)")
     ap.add_argument("--auto-show", action="store_true", default=config.POPUP_AUTO_SHOW,
                     help="tự hiện khung khi chụp xong (mặc định: chỉ hiện khi bấm phím 'hiện')")
     args = ap.parse_args()
@@ -49,7 +51,7 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # in được tiếng Việt/emoji, không crash vì mã hóa
     popup = Popup(root)
     ctl = Controller(popup, capture_png, mode=args.mode, question=args.question, lang=args.lang,
-                     auto_show=args.auto_show, capture_key=_pretty(keys["capture"]))
+                     auto_show=args.auto_show, review=not args.no_review, capture_key=_pretty(keys["capture"]))
     popup.on_hide, popup.on_prev, popup.on_next = ctl.hide, ctl.prev, ctl.next
 
     import queue
@@ -106,7 +108,7 @@ def main() -> None:
     print("Highlight AI (app popup) đang chạy — thứ tự thử: " + " → ".join(llm.provider_chain()))
     print(f"  {_pretty(keys['show'])}: hiện khung đáp án")
     print(f"  {_pretty(keys['hide'])}: ẩn khung (giữ lịch sử)")
-    print(f"  {_pretty(keys['capture'])}: chụp màn hình và hỏi AI")
+    print(f"  {_pretty(keys['capture'])}: chụp màn hình và hỏi AI" + ("  (có tự kiểm tra lại đáp án)" if not args.no_review else ""))
     if config.HOTKEY_TOGGLE:
         print(f"  {_pretty(config.HOTKEY_TOGGLE)}: BẬT/TẮT tất cả phím tắt ở trên")
     print("Dừng: Ctrl+C trong cửa sổ này.")

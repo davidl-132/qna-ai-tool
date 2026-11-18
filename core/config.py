@@ -48,6 +48,8 @@ HOTKEY_SHOW = _get("HOTKEY_SHOW", "ctrl+alt+1")
 HOTKEY_HIDE = _get("HOTKEY_HIDE", "ctrl+alt+2")
 HOTKEY_CAPTURE = _get("HOTKEY_CAPTURE", "ctrl+alt+3")
 HOTKEY_TOGGLE = _get("HOTKEY_TOGGLE", "ctrl+alt+0")  # bật/tắt các phím trên; để trống = không dùng
+# Vòng tự kiểm tra: AI viết nháp rồi xem lại ảnh một lượt nữa (tốn thêm 1 lượt gọi AI mỗi lần chụp)
+AGENT_REVIEW = _get("AGENT_REVIEW", "1").lower() in ("1", "true", "yes", "on")
 POPUP_AUTO_SHOW = _get("POPUP_AUTO_SHOW", "0").lower() in ("1", "true", "yes", "on")
 
 # Ngôn ngữ trả lời mặc định

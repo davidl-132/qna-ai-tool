@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterator
 
-from core import config, llm, prompts
+from core import config, llm, prompts, review as review_mod
 
 
 @dataclass
@@ -19,7 +19,10 @@ class Entry:
     created: float
     mode: str
     question: str = ""
-    status: str = "capturing"  # capturing -> asking -> done | error
+    status: str = "capturing"  # capturing -> asking -> [reviewing ->] done | error
+    review: str = ""  # "" (chưa/không kiểm tra) | ok | fixed | unknown | failed
+    fixed_text: str = ""  # bản đã sửa, khi kiểm tra thấy nháp sai
+    review_error: str = ""
     text: str = ""
     error: str = ""
     size: str = ""  # ví dụ "1920×1080, 312 KB"
@@ -37,6 +40,7 @@ class Controller:
         question: str = "",
         lang: str = "vi",
         auto_show: bool = False,
+        review: bool = False,
         hide_delay: float = 0.25,
         capture_key: str = "Ctrl+Alt+3",
         spawn: Callable[[Callable[[], None]], None] | None = None,
@@ -48,6 +52,7 @@ class Controller:
         self.ask_stream = ask_stream
         self.mode, self.question, self.lang = mode, question, lang
         self.auto_show = auto_show
+        self.review = review  # bật vòng tự kiểm tra (thêm một lượt gọi AI)
         self.hide_delay = hide_delay
         self.capture_key = capture_key
         self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
@@ -102,11 +107,25 @@ class Controller:
             png = self.capture(config.MAX_IMAGE_BYTES)
             put(("captured", entry, png_info(png)))
             system, messages = prompts.build_image(png, "image/png", self.question, self.mode, self.lang)
+            draft = []
             for piece in self.ask_stream(system, messages, entry.info):
+                draft.append(piece)
                 put(("chunk", entry, piece))
+            if self.review:
+                put(("reviewing", entry, None))
+                self._review(entry, png, "".join(draft), put)
             put(("done", entry, None))
         except Exception as e:  # noqa: BLE001 - luồng nền không được chết im lặng
             put(("error", entry, str(e) or e.__class__.__name__))
+
+    def _review(self, entry: Entry, png: bytes, draft: str, put) -> None:
+        """Lượt 2: kiểm tra nháp. Lỗi ở đây không làm mất nháp, chỉ ghi chú là không kiểm tra được."""
+        try:
+            for kind, data in review_mod.run_review(self.ask_stream, png, "image/png", self.question, self.mode,
+                                                    self.lang, draft):
+                put((kind, entry, data))
+        except Exception as e:  # noqa: BLE001
+            put(("review_error", entry, str(e) or e.__class__.__name__))
 
     # ---------- luồng giao diện: gọi định kỳ ----------
 
@@ -123,6 +142,14 @@ class Controller:
                     self.view.show()
             elif kind == "chunk":
                 entry.text += data
+            elif kind == "reviewing":
+                entry.status = "reviewing"
+            elif kind == "verdict":
+                entry.review = data
+            elif kind == "fix":
+                entry.fixed_text += data
+            elif kind == "review_error":
+                entry.review, entry.review_error = "failed", data
             elif kind == "done":
                 entry.status = "done"
                 self.busy = False

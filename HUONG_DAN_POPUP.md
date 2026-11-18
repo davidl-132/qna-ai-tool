@@ -53,22 +53,38 @@ Trong khung:
 
 Khung **không cướp focus**: bàn phím vẫn gõ vào app bạn đang dùng. Nếu khung đang mở lúc bấm Ctrl+Alt+3, app tự ẩn khung đi để không lọt vào ảnh chụp, xong thì mở lại.
 
-## 4. Tùy chọn
+## 4. Tự kiểm tra lại đáp án (agent loop)
+
+Mỗi lần chụp, app gọi AI **2 lượt**: (1) viết câu trả lời nháp, hiện ngay cho bạn xem; (2) AI xem lại ảnh, tự giải lại và so với nháp.
+
+| Kết quả lượt 2 | Khung hiện |
+|---|---|
+| Nháp đúng | Dòng xanh `✔ Đã kiểm tra lại: đáp án khớp.`, tiêu đề có dấu ✔ |
+| Nháp sai | Giữ nguyên nháp, bên dưới thêm `↻ Bản đã sửa:` kèm đáp án mới; tiêu đề ghi `đã sửa` |
+| Không rõ / lượt 2 lỗi | Dòng xám báo không kiểm tra được; nháp vẫn còn, không mất |
+
+Lúc đang kiểm tra khung ghi `⏳ Đang kiểm tra lại…`, và phải đợi xong mới chụp tiếp được. Đổi lại thì mỗi lần chụp tốn thêm 1 lượt gọi AI và chậm thêm vài giây. Key miễn phí dễ báo 429/503 hơn; khi đó chỉ lượt kiểm tra bị lỗi, nháp vẫn hiện.
+
+Tắt vòng này: `AGENT_REVIEW=0` trong `.env`, hoặc chạy `python -m desktop.app --no-review`.
+
+## 5. Tùy chọn
 
 | Cách | Ý nghĩa |
 |---|---|
 | `python -m desktop.app --auto-show` (hoặc `POPUP_AUTO_SHOW=1` trong `.env`) | Chụp xong tự hiện khung, khỏi bấm Ctrl+Alt+1 |
+| `--no-review` (hoặc `AGENT_REVIEW=0`) | Tắt tự kiểm tra lại, chỉ 1 lượt gọi AI (nhanh hơn) |
 | `--mode explain` / `translate` / `summarize` | Đổi kiểu trả lời (mặc định `answer`) |
 | `--question "đáp án đúng là gì?"` | Câu hỏi thêm gửi kèm mỗi ảnh |
 
-## 5. Giới hạn
+## 6. Giới hạn
 
 - Chỉ chạy trên **Windows**. Chỉ chụp **màn hình chính** (không chụp màn hình thứ hai).
 - Lịch sử nằm trong bộ nhớ, **tắt app là mất**.
-- Mỗi lần chỉ xử lý một ảnh; bấm Ctrl+Alt+3 khi đang hỏi thì bị bỏ qua.
+- Mỗi lần chỉ xử lý một ảnh (gồm cả lượt kiểm tra lại); bấm phím chụp khi đang xử lý thì bị bỏ qua.
+- AI kiểm tra vẫn có thể sai: ✔ nghĩa là hai lượt đồng ý với nhau, không phải bảo đảm đúng. Việc nào quan trọng thì bạn tự xem lại.
 - Khung chỉ hiện trên màn hình thường; game/video toàn màn hình độc quyền có thể che khung.
 
-## 6. Lỗi thường gặp
+## 7. Lỗi thường gặp
 
 | Thấy gì | Cách xử lý |
 |---|---|
