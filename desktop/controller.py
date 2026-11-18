@@ -26,6 +26,8 @@ class Entry:
     text: str = ""
     error: str = ""
     size: str = ""  # ví dụ "1920×1080, 312 KB"
+    source: str = "image"  # image (chụp màn hình) | text (chữ bôi đen)
+    query: str = ""  # chữ bôi đen đã tra
     reshow: bool = False  # khung đang mở lúc bấm chụp (đã ẩn tạm) -> mở lại khi có kết quả
     info: dict = field(default_factory=dict)
 
@@ -42,7 +44,7 @@ class Controller:
         auto_show: bool = False,
         review: bool = False,
         hide_delay: float = 0.25,
-        capture_key: str = "Ctrl+Alt+3",
+        capture_key: str = "Left Alt",
         spawn: Callable[[Callable[[], None]], None] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.time,
@@ -66,7 +68,8 @@ class Controller:
     # ---------- lệnh từ phím tắt (gọi ở luồng giao diện) ----------
 
     def handle(self, name: str) -> None:
-        {"show": self.show, "hide": self.hide, "capture": self.start_capture}[name]()
+        {"show": self.show, "hide": self.hide, "toggle": self.toggle, "capture": self.start_capture,
+         "prev": self.prev, "next": self.next}[name]()
 
     def show(self) -> None:
         self.view.show()
@@ -74,6 +77,23 @@ class Controller:
 
     def hide(self) -> None:
         self.view.hide()  # chỉ ẩn khung, lịch sử vẫn giữ nguyên
+
+    def toggle(self) -> None:
+        """Bấm Shift đơn: đang hiện thì ẩn, đang ẩn thì hiện."""
+        if self.view.visible:
+            self.hide()
+        else:
+            self.show()
+
+    def start_text(self, text: str) -> None:
+        """Tra chữ vừa bôi đen. Tự hiện khung (vì chính bạn vừa chủ động bôi đen)."""
+        if self.busy or not text.strip():
+            return
+        self.busy = True
+        entry = Entry(created=self.clock(), mode=self.mode, source="text", query=text, reshow=True)
+        self.history.append(entry)
+        self.index = len(self.history) - 1
+        self.spawn(lambda: self._work_text(entry, text))
 
     def prev(self) -> None:
         if self.index > 0:
@@ -116,6 +136,17 @@ class Controller:
                 self._review(entry, png, "".join(draft), put)
             put(("done", entry, None))
         except Exception as e:  # noqa: BLE001 - luồng nền không được chết im lặng
+            put(("error", entry, str(e) or e.__class__.__name__))
+
+    def _work_text(self, entry: Entry, text: str) -> None:
+        put = self._events.put
+        try:
+            system, messages = prompts.build(text[: config.MAX_SELECTION_CHARS], self.mode, lang=self.lang)
+            put(("captured", entry, f"{len(text)} ký tự"))  # hiện khung + chuyển sang "đang hỏi"
+            for piece in self.ask_stream(system, messages, entry.info):
+                put(("chunk", entry, piece))
+            put(("done", entry, None))  # tra chữ nhanh: không chạy vòng tự kiểm tra
+        except Exception as e:  # noqa: BLE001
             put(("error", entry, str(e) or e.__class__.__name__))
 
     def _review(self, entry: Entry, png: bytes, draft: str, put) -> None:

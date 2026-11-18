@@ -171,7 +171,7 @@ class ControllerFlow(unittest.TestCase):
         ctl, view, _ = make()
         ctl.handle("show")
         self.assertTrue(view.visible)
-        self.assertIn("Ctrl+Alt+3", view.msg)
+        self.assertIn("Left Alt", view.msg)
 
     def test_capture_streams_answer_but_stays_hidden_by_default(self):
         ctl, view, seen = make(answers=("Đáp ", "án B"))
@@ -185,6 +185,47 @@ class ControllerFlow(unittest.TestCase):
         self.assertFalse(ctl.busy)
         ctl.handle("show")
         self.assertEqual(view.rendered, ("Đáp án B", "done", 0, 1))
+
+    def test_start_text_streams_answer_and_auto_shows_without_capture(self):
+        ctl, view, seen = make(answers=("Nghĩa: ", "xin chào"))
+        ctl.start_text("hello")
+        ctl.pump()
+        self.assertEqual(seen["calls"], 1)  # một lượt gọi, không chạy vòng tự kiểm tra
+        self.assertTrue(view.visible)  # bôi đen là chủ động -> tự hiện
+        e = ctl.history[0]
+        self.assertEqual((e.source, e.query, e.text, e.status), ("text", "hello", "Nghĩa: xin chào", "done"))
+        self.assertFalse(ctl.busy)
+
+    def test_start_text_ignores_blank_and_busy(self):
+        ctl, _, seen = make()
+        ctl.start_text("   ")
+        ctl.pump()
+        self.assertEqual(ctl.history, [])
+        ctl.busy = True
+        ctl.start_text("x")
+        self.assertEqual(ctl.history, [])
+
+    def test_toggle_flips_visibility_and_keeps_history(self):
+        ctl, view, _ = make()
+        ctl.handle("capture"); ctl.pump()
+        ctl.handle("toggle")
+        self.assertTrue(view.visible)
+        ctl.handle("toggle")
+        self.assertFalse(view.visible)
+        self.assertEqual(len(ctl.history), 1)
+
+    def test_prev_next_via_handle_walk_history(self):
+        ctl, view, _ = make()
+        ctl.handle("capture"); ctl.pump()
+        ctl.handle("capture"); ctl.pump()
+        ctl.handle("show")
+        self.assertEqual(view.rendered[2:], (1, 2))
+        ctl.handle("prev")
+        self.assertEqual(view.rendered[2:], (0, 2))
+        ctl.handle("prev")  # đã ở câu đầu: đứng yên
+        self.assertEqual(view.rendered[2:], (0, 2))
+        ctl.handle("next")
+        self.assertEqual(view.rendered[2:], (1, 2))
 
     def test_auto_show_pops_up_after_capture(self):
         ctl, view, _ = make(auto_show=True)
@@ -318,6 +359,28 @@ class PopupWidget(unittest.TestCase):
 
     def tearDown(self):
         self.root.destroy()
+
+    def test_nav_buttons_are_boxed_and_follow_history_position(self):
+        from desktop.controller import Entry
+        from desktop.popup import Popup
+
+        p = Popup(self.root)
+        e = Entry(created=0, mode="answer", text="B", status="done")
+
+        def boxed(tag):
+            kinds = {p.head.type(i) for i in p.head.find_withtag(tag)}
+            self.assertIn("rectangle", kinds)  # có khung -> vùng bấm to
+
+        p.render(e, 1, 3)  # giữa lịch sử: cả hai nút đều dùng được
+        boxed("btn_prev"); boxed("btn_next")
+        self.assertTrue(p.head.tag_bind("btn_prev", "<Button-1>"))
+        self.assertTrue(p.head.tag_bind("btn_next", "<Button-1>"))
+        p.render(e, 0, 3)  # câu đầu: không có "trước"
+        self.assertFalse(p.head.tag_bind("btn_prev", "<Button-1>"))
+        self.assertTrue(p.head.tag_bind("btn_next", "<Button-1>"))
+        p.render(e, 2, 3)  # câu cuối: không có "sau"
+        self.assertTrue(p.head.tag_bind("btn_prev", "<Button-1>"))
+        self.assertFalse(p.head.tag_bind("btn_next", "<Button-1>"))
 
     def test_render_show_hide_and_corner_position(self):
         from desktop.controller import Entry

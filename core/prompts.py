@@ -18,7 +18,8 @@ def _answer_only(source: str) -> str:
         "- Đúng/Sai: chỉ ghi **Đúng** hoặc **Sai** (mỗi mệnh đề một dòng nếu có nhiều).\n"
         "- Điền khuyết, tính toán, trả lời ngắn: chỉ ghi giá trị hoặc cụm từ cần điền, kèm đơn vị nếu có.\n"
         "- Tự luận hoặc lập trình: chỉ ghi kết quả ngắn nhất đủ trả lời; code thì chỉ phần code cần thiết trong khối ```.\n"
-        "- Không có câu hỏi nào: ghi đúng một dòng `Không thấy câu hỏi.`\n"
+        "- Không có câu hỏi: nếu là một từ/cụm từ thì ghi nghĩa thật ngắn (kèm từ gốc nếu cần); nếu là đoạn văn "
+        "thì ghi ý chính tối đa 2 câu. Không có nội dung gì: ghi đúng một dòng `Không thấy nội dung.`\n"
         "- Chỉ khi thật sự không chắc (đề mờ, thiếu dữ kiện): ghi đáp án khả dĩ nhất rồi thêm đúng một dòng "
         "`(Không chắc: lý do rất ngắn)`."
     )

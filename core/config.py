@@ -44,15 +44,23 @@ MAX_CONTEXT_CHARS = int(_get("MAX_CONTEXT_CHARS", "1500"))
 MAX_IMAGE_BYTES = int(_get("MAX_IMAGE_BYTES", "7000000"))
 
 # App popup (desktop/app.py): phím tắt toàn cục và hành vi khung đáp án
-HOTKEY_SHOW = _get("HOTKEY_SHOW", "ctrl+alt+1")
-HOTKEY_HIDE = _get("HOTKEY_HIDE", "ctrl+alt+2")
-HOTKEY_CAPTURE = _get("HOTKEY_CAPTURE", "ctrl+alt+3")
-HOTKEY_TOGGLE = _get("HOTKEY_TOGGLE", "ctrl+alt+0")  # bật/tắt các phím trên; để trống = không dùng
+# Phím tắt duy nhất còn lại ngoài Left Alt/Left Shift bấm đơn (HOTKEY_SHOW/HIDE/CAPTURE đã bỏ, có trong .env cũng bị bỏ qua)
+HOTKEY_TOGGLE = _get("HOTKEY_TOGGLE", "ctrl+alt+0")  # bật/tắt toàn bộ app; để trống = không dùng
 # Vòng tự kiểm tra: AI viết nháp rồi xem lại ảnh một lượt nữa (tốn thêm 1 lượt gọi AI mỗi lần chụp)
 AGENT_REVIEW = _get("AGENT_REVIEW", "1").lower() in ("1", "true", "yes", "on")
 # Độ đậm của khung popup (1.0 = đặc, 0.2 = rất mờ) và chế độ "ghost" (Windows, mặc định BẬT): nền biến mất, chỉ còn chữ
 POPUP_OPACITY = float(_get("POPUP_OPACITY", "0.96"))
 POPUP_GHOST = _get("POPUP_GHOST", "1").lower() in ("1", "true", "yes", "on")
+# Bấm đơn một phím bổ trợ (lalt, ralt, lshift, rshift, lctrl, rctrl; để trống = không dùng)
+TAP_CAPTURE = _get("TAP_CAPTURE", "lalt")  # chụp màn hình rồi hỏi AI
+TAP_POPUP = _get("TAP_POPUP", "lshift")  # ẩn/hiện khung popup
+# Tự tra chữ bôi đen ở mọi app: giữ nguyên vùng chọn SELECT_SETTLE giây thì tra
+SELECT_AUTO = _get("SELECT_AUTO", "1").lower() in ("1", "true", "yes", "on")
+SELECT_SETTLE = float(_get("SELECT_SETTLE", "1.0"))
+SELECT_BLOCK_APPS = _get("SELECT_BLOCK_APPS", "")  # để trống = dùng danh sách mặc định (terminal, explorer, mstsc)
+SELECT_ONLY_APPS = _get("SELECT_ONLY_APPS", "")  # nếu điền (vd. chrome.exe,winword.exe): chỉ tra trong các app này
+# Khi khung đang hiện: mũi tên Trái/Phải = xem câu trước/sau (app nuốt 2 phím này lúc đó; ẩn khung để dùng lại bình thường)
+NAV_KEYS = _get("NAV_KEYS", "1").lower() in ("1", "true", "yes", "on")
 POPUP_AUTO_SHOW = _get("POPUP_AUTO_SHOW", "0").lower() in ("1", "true", "yes", "on")
 
 # Ngôn ngữ trả lời mặc định

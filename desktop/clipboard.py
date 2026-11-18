@@ -10,6 +10,10 @@ import sys
 import time
 import zlib
 
+CF_UNICODETEXT = 13
+# Các định dạng không phải khối nhớ HGLOBAL (là handle GDI): không sao lưu được
+_NON_HGLOBAL = {2, 3, 9, 14, 0x80, 0x82, 0x83, 0x8E}
+
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 CF_DIB = 8
 
@@ -124,6 +128,21 @@ class WinClipboard:
         k.GlobalUnlock.restype = wintypes.BOOL
         k.GlobalSize.argtypes = [wintypes.HGLOBAL]
         k.GlobalSize.restype = ctypes.c_size_t
+        k.GlobalAlloc.argtypes = [wintypes.UINT, ctypes.c_size_t]
+        k.GlobalAlloc.restype = wintypes.HGLOBAL
+        k.GlobalFree.argtypes = [wintypes.HGLOBAL]
+        k.GlobalFree.restype = wintypes.HGLOBAL
+        u.EnumClipboardFormats.argtypes = [wintypes.UINT]
+        u.EnumClipboardFormats.restype = wintypes.UINT
+        u.EmptyClipboard.restype = wintypes.BOOL
+        u.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        u.SetClipboardData.restype = wintypes.HANDLE
+        u.CreateWindowExW.argtypes = [wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                                      ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.HWND,
+                                      wintypes.HANDLE, wintypes.HANDLE, wintypes.LPVOID]
+        u.CreateWindowExW.restype = wintypes.HWND
+        u.DestroyWindow.argtypes = [wintypes.HWND]
+        u.DestroyWindow.restype = wintypes.BOOL
         self.cf_png = u.RegisterClipboardFormatW("PNG")
 
     def sequence(self) -> int:
@@ -172,3 +191,82 @@ class WinClipboard:
             return None
         finally:
             self.user32.CloseClipboard()
+
+    # ---------- chữ + sao lưu/khôi phục (dùng khi tự copy chữ bôi đen) ----------
+
+    def _open(self, hwnd=None) -> bool:
+        for _ in range(20):  # app khác có thể đang giữ clipboard, thử lại vài lần
+            if self.user32.OpenClipboard(hwnd):
+                return True
+            time.sleep(0.05)
+        return False
+
+    def read_text(self) -> str | None:
+        """Chữ (Unicode) trong clipboard; None nếu không có chữ hoặc không mở được."""
+        if not self._open():
+            return None
+        try:
+            if not self.user32.IsClipboardFormatAvailable(CF_UNICODETEXT):
+                return None
+            data = self._read_format(CF_UNICODETEXT)
+            if data is None:
+                return None
+            return data.decode("utf-16-le", errors="replace").split("\x00", 1)[0]
+        finally:
+            self.user32.CloseClipboard()
+
+    def snapshot(self, max_bytes: int = 32_000_000) -> list[tuple[int, bytes]] | None:
+        """Sao lưu MỌI định dạng của clipboard (để trả lại y nguyên sau khi tự copy).
+
+        Trả về None nếu không sao lưu trọn vẹn được (có ảnh bitmap dạng handle, quá lớn, không mở được...);
+        khi đó phía gọi sẽ KHÔNG đụng vào clipboard.
+        """
+        if not self._open():
+            return None
+        try:
+            items: list[tuple[int, bytes]] = []
+            total, fmt = 0, 0
+            while True:
+                fmt = self.user32.EnumClipboardFormats(fmt)
+                if not fmt:
+                    break
+                if fmt in _NON_HGLOBAL or 0x300 <= fmt <= 0x3FF:
+                    return None
+                data = self._read_format(fmt)
+                if data is None:
+                    continue  # định dạng không đọc được (vd. chỉ có trong OLE): bỏ qua
+                total += len(data)
+                if total > max_bytes:
+                    return None
+                items.append((fmt, data))
+            return items
+        finally:
+            self.user32.CloseClipboard()
+
+    def restore(self, items: list[tuple[int, bytes]]) -> None:
+        """Trả clipboard về đúng như lúc sao lưu (danh sách rỗng = xóa sạch)."""
+        ct = self._ct
+        # Phải mở clipboard bằng một cửa sổ thật: với NULL thì SetClipboardData sau EmptyClipboard bị từ chối
+        hwnd = self.user32.CreateWindowExW(0, "STATIC", None, 0, 0, 0, 0, 0, None, None, None, None)
+        try:
+            if not self._open(hwnd):
+                return
+            try:
+                self.user32.EmptyClipboard()
+                for fmt, data in items:
+                    h = self.kernel32.GlobalAlloc(0x0002, max(len(data), 1))  # GMEM_MOVEABLE
+                    if not h:
+                        continue
+                    ptr = self.kernel32.GlobalLock(h)
+                    if not ptr:
+                        self.kernel32.GlobalFree(h)
+                        continue
+                    ct.memmove(ptr, data, len(data))
+                    self.kernel32.GlobalUnlock(h)
+                    if not self.user32.SetClipboardData(fmt, h):
+                        self.kernel32.GlobalFree(h)  # không được nhận thì mình phải tự giải phóng
+            finally:
+                self.user32.CloseClipboard()
+        finally:
+            if hwnd:
+                self.user32.DestroyWindow(hwnd)

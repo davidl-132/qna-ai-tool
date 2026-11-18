@@ -48,7 +48,7 @@ class Popup:
         self.w, self.margin = int(width * self.scale), int(margin * self.scale)
         self.pad = int(8 * self.scale)
         self.head_h = int(24 * self.scale)
-        self.outline = 2 if self.scale >= 1.5 else 1
+        self.outline = 2  # viền đen dày cho dễ đọc trên mọi nền
         self.on_prev = self.on_next = self.on_hide = lambda: None
         self.visible = False
         self.title_text = ""
@@ -74,6 +74,7 @@ class Popup:
         self.f_body = tkfont.Font(root=root, family=family, size=10, weight="bold")
         self.f_head = tkfont.Font(root=root, family=family, size=9, weight="bold")
         self.f_btn = tkfont.Font(root=root, family=family, size=12, weight="bold")
+        self.f_nav = tkfont.Font(root=root, family=family, size=14, weight="bold")
 
         self.head = tk.Canvas(self.win, width=self.w, height=self.head_h, bg=self.bg, highlightthickness=0)
         self.head.pack(side="top", fill="x")
@@ -92,7 +93,7 @@ class Popup:
 
     # ---------- vẽ chữ có viền ----------
 
-    def _text(self, canvas, x, y, text, font, anchor="nw", width=0, tags=()):
+    def _text(self, canvas, x, y, text, font, anchor="nw", width=0, tags=(), bold=False):
         """Chữ trắng đậm viền đen: vẽ chữ đen lệch quanh 8 hướng rồi chữ trắng lên trên."""
         r = self.outline
         kw = {"font": font, "anchor": anchor, "text": text, "tags": tags}
@@ -102,7 +103,10 @@ class Popup:
             for dy in range(-r, r + 1):
                 if (dx or dy) and dx * dx + dy * dy <= r * r + 1:
                     canvas.create_text(x + dx, y + dy, fill=BLACK, **kw)
-        return canvas.create_text(x, y, fill=WHITE, **kw)
+        item = canvas.create_text(x, y, fill=WHITE, **kw)
+        if bold:  # chữ trắng vẽ chồng lệch 1 điểm ảnh -> nét dày hơn
+            canvas.create_text(x + 1, y, fill=WHITE, **kw)
+        return item
 
     @staticmethod
     def _fit(font, text: str, max_px: int) -> str:
@@ -122,14 +126,35 @@ class Popup:
         self.head.tag_bind(tag, "<Leave>", lambda _e: self.head.config(cursor=""))
         return right_edge - font.measure(label) - int(8 * self.scale)
 
-    def _draw_head(self, title: str) -> None:
+    def _nav_button(self, name: str, label: str, right_edge: int, cmd, enabled: bool) -> int:
+        """Nút ‹ › to, có khung: bấm trúng dễ hơn nhiều so với một ký tự mảnh. Nền #000000 (khác màu khóa
+        trong suốt) nên ở chế độ ghost vẫn nhận được cú bấm."""
+        bw, bh = int(26 * self.scale), self.head_h - 2
+        x0, y0 = right_edge - bw, 1
+        tag = f"btn_{name}"
+        edge = WHITE if enabled else "#707070"
+        self.head.create_rectangle(x0, y0, right_edge, y0 + bh, fill=BLACK, outline=edge, width=2, tags=(tag,))
+        cx, cy = x0 + bw // 2, y0 + bh // 2
+        if enabled:
+            self._text(self.head, cx, cy, label, self.f_nav, anchor="center", tags=(tag,), bold=True)
+            self.head.tag_bind(tag, "<Button-1>", lambda _e: cmd())
+            self.head.tag_bind(tag, "<Enter>", lambda _e: self.head.config(cursor="hand2"))
+            self.head.tag_bind(tag, "<Leave>", lambda _e: self.head.config(cursor=""))
+        else:  # hết câu để xem thì nút mờ đi, bấm không làm gì (gỡ cả lệnh bấm cũ: tag giữ binding sau khi xóa hình)
+            for seq in ("<Button-1>", "<Enter>", "<Leave>"):
+                self.head.tag_unbind(tag, seq)
+            self.head.create_text(cx, cy, text=label, font=self.f_nav, fill="#707070", tags=(tag,))
+        return x0 - int(4 * self.scale)
+
+    def _draw_head(self, title: str, index: int = 0, total: int = 0) -> None:
         self.head.delete("all")
         self.title_text = title
         x = self.w - self.pad
-        for name, label, cmd in (("hide", "×", lambda: self.on_hide()), ("fade", "◐", lambda: self.cycle_opacity()),
-                                 ("next", "›", lambda: self.on_next()), ("prev", "‹", lambda: self.on_prev()),
-                                 ("copy", "Copy", lambda: self.copy())):
+        for name, label, cmd in (("hide", "×", lambda: self.on_hide()), ("fade", "◐", lambda: self.cycle_opacity())):
             x = self._button(name, label, x, cmd)
+        x = self._nav_button("next", "›", x, lambda: self.on_next(), enabled=index < total - 1)
+        x = self._nav_button("prev", "‹", x, lambda: self.on_prev(), enabled=index > 0)
+        x = self._button("copy", "Copy", x - int(4 * self.scale), lambda: self.copy())
         shown = self._fit(self.f_head, title, max(x - self.pad, 20))
         self._text(self.head, self.pad, self.head_h // 2, shown, self.f_head, anchor="w", tags=("drag",))
         self.head.tag_bind("drag", "<ButtonPress-1>", self._drag_start)
@@ -140,7 +165,7 @@ class Popup:
         self.body_text = text
         self.body.delete("all")
         inner = self.w - 2 * self.pad
-        self._text(self.body, self.pad, 2, text, self.f_body, width=inner)
+        self._text(self.body, self.pad, 2, text, self.f_body, width=inner, bold=True)
         content_h = (self.body.bbox("all") or (0, 0, 0, 0))[3] + self.pad
         view_h = min(max(content_h, int(20 * self.scale)), self.max_h)
         self.body.config(height=view_h, scrollregion=(0, 0, self.w, content_h))
@@ -164,7 +189,7 @@ class Popup:
 
     def render(self, entry, index: int, total: int) -> None:
         title, body = compose(entry, index, total)
-        self._draw_head(title)
+        self._draw_head(title, index, total)
         self._full_text = entry.text.replace("**", "")  # nút Copy chép đáp án, không kèm dòng trạng thái
         if entry.review == "fixed" and entry.fixed_text:
             self._full_text = entry.fixed_text.replace("**", "")  # bản đã sửa mới là đáp án cuối
@@ -206,6 +231,13 @@ class Popup:
             except Exception:  # noqa: BLE001
                 pass
         return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+    def rect(self) -> tuple[int, int, int, int] | None:
+        """Vị trí khung trên màn hình (trái, trên, phải, dưới) khi đang hiện; dùng để bỏ qua bôi đen ngay trong khung."""
+        if not self.visible:
+            return None
+        x, y = self.win.winfo_x(), self.win.winfo_y()
+        return x, y, x + self.win.winfo_width(), y + self.win.winfo_height()
 
     def _drag_start(self, e) -> None:
         self._x, self._y = e.x_root - self.win.winfo_x(), e.y_root - self.win.winfo_y()
