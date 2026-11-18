@@ -13,8 +13,8 @@ REVIEW_RULES = (
     "Hãy tự giải lại từ ảnh một cách độc lập rồi so với nháp. "
     "Dòng ĐẦU TIÊN chỉ được ghi đúng một từ: ĐÚNG (nháp chính xác) hoặc SAI (nháp có lỗi). "
     "Nếu ĐÚNG: dừng ngay, không viết thêm gì. "
-    "Nếu SAI: từ dòng thứ hai, nêu lỗi trong một câu rồi viết lại câu trả lời đã sửa hoàn chỉnh, "
-    "cùng định dạng và độ ngắn gọn như một câu trả lời bình thường. "
+    "Nếu SAI: từ dòng thứ hai chỉ viết lại câu trả lời đã sửa, đúng định dạng và độ ngắn gọn của yêu cầu ban đầu "
+    "(không nêu lý do, không giải thích thêm). "
     "Dòng đầu luôn ghi ĐÚNG hoặc SAI dù trả lời bằng ngôn ngữ nào."
 )
 CHECK_REQUEST = "Hãy kiểm tra câu trả lời nháp ở trên theo đúng quy tắc: dòng đầu chỉ ghi ĐÚNG hoặc SAI."

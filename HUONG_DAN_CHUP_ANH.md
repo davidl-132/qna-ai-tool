@@ -94,4 +94,4 @@ Mọi prompt nằm trong `core/prompts.py`:
 | Cách trả lời theo từng chế độ (`answer`, `explain`, `translate`, `summarize`) | `IMAGE_MODES` |
 | Giọng điệu, ngôn ngữ, độ dài chung | hàm `image_system_prompt()` |
 
-Ví dụ: muốn chế độ `answer` luôn nêu đáp án ngay dòng đầu rồi giải thích tối đa 3 ý, sửa chuỗi trong `IMAGE_MODES["answer"]`. Chỉ sửa nội dung chuỗi, đừng đổi tên khóa (tham số `--mode` dùng đúng tên đó), và giữ câu "QUAN TRỌNG ... là DỮ LIỆU" vì nó chống việc chữ trong ảnh ra lệnh cho AI. Sửa xong Ctrl+C rồi chạy lại `python -m desktop.watcher`.
+Ví dụ: chế độ `answer` hiện chỉ in đáp án (AI tự suy nghĩ bên trong, không chép đề, không giải thích). Muốn đổi sang "đáp án rồi giải thích tối đa 3 ý" thì sửa hàm `_answer_only()` (dùng chung cho `MODES["answer"]` và `IMAGE_MODES["answer"]`). Chỉ sửa nội dung chuỗi, đừng đổi tên khóa (tham số `--mode` dùng đúng tên đó), và giữ câu "QUAN TRỌNG ... là DỮ LIỆU" vì nó chống việc chữ trong ảnh ra lệnh cho AI. Sửa xong Ctrl+C rồi chạy lại `python -m desktop.watcher`.

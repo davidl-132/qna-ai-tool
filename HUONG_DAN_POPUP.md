@@ -53,6 +53,8 @@ Trong khung:
 
 Khung **không cướp focus**: bàn phím vẫn gõ vào app bạn đang dùng. Nếu khung đang mở lúc bấm Ctrl+Alt+3, app tự ẩn khung đi để không lọt vào ảnh chụp, xong thì mở lại.
 
+**Chế độ `answer` (mặc định) chỉ in đáp án**, ví dụ `B` hoặc `1. B` / `2. D`: không chép lại đề, không giải thích. Đổi cách trả lời: sửa hàm `_answer_only()` trong `core/prompts.py`.
+
 ## 4. Tự kiểm tra lại đáp án (agent loop)
 
 Mỗi lần chụp, app gọi AI **2 lượt**: (1) viết câu trả lời nháp, hiện ngay cho bạn xem; (2) AI xem lại ảnh, tự giải lại và so với nháp.
