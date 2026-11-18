@@ -116,40 +116,49 @@ class ControllerReview(unittest.TestCase):
 
 
 @unittest.skipUnless(os.environ.get("DISPLAY") or os.name == "nt", "cần màn hình để thử tkinter")
-class PopupReviewRender(unittest.TestCase):
-    def test_states(self):
+class PopupTransparency(unittest.TestCase):
+    def setUp(self):
         try:
             import tkinter as tk
-            from desktop.popup import Popup
 
-            root = tk.Tk()
+            self.root = tk.Tk()
         except Exception as e:  # noqa: BLE001
             self.skipTest(f"không có tkinter/màn hình: {e}")
-        root.withdraw()
-        try:
-            from desktop.controller import Entry
+        self.root.withdraw()
 
-            p = Popup(root)
-            e = Entry(created=0, mode="answer", text="Đáp án: B", status="reviewing")
-            p.render(e, 0, 1)
-            self.assertIn("Đang kiểm tra lại", p.text.get("1.0", "end"))
-            e.status, e.review = "done", "ok"
-            p.render(e, 0, 1)
-            self.assertIn("đáp án khớp", p.text.get("1.0", "end"))
-            self.assertTrue(p.title.cget("text").endswith("✔"))
-            e.review, e.fixed_text = "fixed", "Đúng ra là **C**"
-            p.render(e, 0, 1)
-            body = p.text.get("1.0", "end")
-            self.assertIn("Đáp án: B", body)  # vẫn thấy nháp
-            self.assertIn("Bản đã sửa", body)
-            self.assertIn("Đúng ra là C", body)
-            self.assertNotIn("**", body)
-            self.assertIn("đã sửa", p.title.cget("text"))
-            e.review, e.review_error = "failed", "hết lượt"
-            p.render(e, 0, 1)
-            self.assertIn("Không kiểm tra lại được: hết lượt", p.text.get("1.0", "end"))
-        finally:
-            root.destroy()
+    def tearDown(self):
+        self.root.destroy()
+
+    def test_opacity_clamped_and_cycles_through_steps_then_wraps(self):
+        from desktop.popup import OPACITY_STEPS, Popup
+
+        self.assertEqual(Popup(self.root, alpha=5).opacity, 1.0)
+        self.assertEqual(Popup(self.root, alpha=0.01).opacity, 0.2)
+        p = Popup(self.root, alpha=1.0)
+        seen = [p.opacity]
+        for _ in range(len(OPACITY_STEPS)):
+            p.cycle_opacity()
+            seen.append(p.opacity)
+        self.assertEqual(seen[:-1], list(OPACITY_STEPS))  # đậm -> mờ dần qua từng mức
+        self.assertEqual(seen[-1], 1.0)  # hết mức mờ nhất thì quay lại đậm nhất
+
+    def test_cycle_from_custom_opacity_goes_to_next_lower_step(self):
+        from desktop.popup import Popup
+
+        p = Popup(self.root, alpha=0.96)
+        p.cycle_opacity()
+        self.assertEqual(p.opacity, 0.85)
+
+    def test_ghost_requests_do_not_break_and_fall_back_when_unsupported(self):
+        from desktop.popup import Popup
+
+        p = Popup(self.root, ghost=True)  # Linux/Xvfb thường không có -transparentcolor -> tự dùng khung thường
+        p.show()
+        p.render(__import__("desktop.controller", fromlist=["Entry"]).Entry(created=0, mode="answer", text="Đáp án: B",
+                                                                           status="done"), 0, 1)
+        self.assertIn("Đáp án: B", p.body_text)
+        self.assertIsInstance(p.ghost, bool)
+        self.assertEqual(p.bg, "#010101" if p.ghost else "#000000")  # không hỗ trợ ghost thì nền đen đặc
 
 
 if __name__ == "__main__":

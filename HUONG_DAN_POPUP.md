@@ -42,14 +42,16 @@ Muốn dùng đúng `1`, `2`, `3`: đặt `HOTKEY_SHOW=1`, `HOTKEY_HIDE=2`, `HOT
 3. Bấm **Ctrl+Alt+1** để hiện khung. Câu trả lời chạy dần từng chữ trong khung.
 4. Xong thì bấm **Ctrl+Alt+2** để ẩn.
 
-Trong khung:
+Khung kiểu **phụ đề**: chữ **trắng đậm, viền đen**, nhỏ gọn, tự cao lên theo độ dài câu trả lời (đáy khung đứng yên ở góc dưới phải). Hàng đầu khung ghi `2/5 · tên-model · ✔` và các nút:
 
 | Thao tác | Tác dụng |
 |---|---|
-| Nút **‹ ›** trên thanh tiêu đề | Xem câu trước / sau trong lịch sử (tiêu đề ghi `2/5` và tên model) |
+| Nút **Copy** | Chép đáp án vào clipboard (có bản đã sửa thì chép bản sửa; không kèm dòng trạng thái) |
+| Nút **‹ ›** | Xem câu trước / sau trong lịch sử |
+| Nút **◐** | Đổi độ mờ: mỗi lần bấm mờ thêm một mức (100% → 85% → 70% → 55% → 40% → 25%), hết mức thì quay lại 100% |
 | Nút **×** | Ẩn khung (giống Ctrl+Alt+2, không xóa lịch sử) |
-| Kéo thanh tiêu đề | Dời khung sang chỗ khác |
-| Bôi chữ + Ctrl+C | Copy câu trả lời |
+| Kéo hàng đầu | Dời khung sang chỗ khác |
+| Con lăn chuột trên chữ | Cuộn khi câu trả lời dài quá 45% chiều cao màn hình |
 
 Khung **không cướp focus**: bàn phím vẫn gõ vào app bạn đang dùng. Nếu khung đang mở lúc bấm Ctrl+Alt+3, app tự ẩn khung đi để không lọt vào ảnh chụp, xong thì mở lại.
 
@@ -69,7 +71,20 @@ Lúc đang kiểm tra khung ghi `⏳ Đang kiểm tra lại…`, và phải đ�
 
 Tắt vòng này: `AGENT_REVIEW=0` trong `.env`, hoặc chạy `python -m desktop.app --no-review`.
 
-## 5. Tùy chọn
+## 5. Khung trong suốt
+
+| Kiểu | Cách bật | Kết quả |
+|---|---|---|
+| **Mờ** | Bấm nút ◐ trên khung, hoặc đặt `POPUP_OPACITY=0.5` trong `.env` | Cả khung mờ đi, nhìn xuyên qua thấy cửa sổ phía sau. Thấp nhất 0.2 |
+| **Ghost (chỉ còn chữ), mặc định** | Luôn bật sẵn. Muốn khung đặc: `python -m desktop.app --solid` hoặc `POPUP_GHOST=0` | Nền khung biến mất hẳn, chỉ chữ nổi trên màn hình. Click vào chỗ trống thì xuyên xuống cửa sổ bên dưới |
+
+Lưu ý khi dùng ghost:
+- Chỉ chạy trên Windows. Máy khác tự dùng khung thường.
+- Chữ trắng có viền đen nên đọc được trên cả nền sáng lẫn tối. Nếu vẫn thấy khó, dùng `--solid` (nền đen đặc).
+- Các nút chỉ bấm được đúng trên nét chữ của nút (phần trong suốt thì click xuyên xuống). Nút nhỏ nên bấm hơi lệch là trượt.
+- Chữ không chọn/bôi được như ô văn bản; muốn lấy đáp án thì bấm **Copy**.
+
+## 6. Tùy chọn
 
 | Cách | Ý nghĩa |
 |---|---|
@@ -78,7 +93,7 @@ Tắt vòng này: `AGENT_REVIEW=0` trong `.env`, hoặc chạy `python -m deskto
 | `--mode explain` / `translate` / `summarize` | Đổi kiểu trả lời (mặc định `answer`) |
 | `--question "đáp án đúng là gì?"` | Câu hỏi thêm gửi kèm mỗi ảnh |
 
-## 6. Giới hạn
+## 7. Giới hạn
 
 - Chỉ chạy trên **Windows**. Chỉ chụp **màn hình chính** (không chụp màn hình thứ hai).
 - Lịch sử nằm trong bộ nhớ, **tắt app là mất**.
@@ -86,7 +101,7 @@ Tắt vòng này: `AGENT_REVIEW=0` trong `.env`, hoặc chạy `python -m deskto
 - AI kiểm tra vẫn có thể sai: ✔ nghĩa là hai lượt đồng ý với nhau, không phải bảo đảm đúng. Việc nào quan trọng thì bạn tự xem lại.
 - Khung chỉ hiện trên màn hình thường; game/video toàn màn hình độc quyền có thể che khung.
 
-## 7. Lỗi thường gặp
+## 8. Lỗi thường gặp
 
 | Thấy gì | Cách xử lý |
 |---|---|

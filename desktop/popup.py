@@ -1,72 +1,195 @@
 """Khung popup nhỏ (tkinter) ở góc dưới bên phải màn hình để hiện câu trả lời.
 
-- Không viền, luôn nằm trên cùng, không cướp focus của app bạn đang dùng (Windows).
-- Kéo thanh tiêu đề để dời chỗ; nút ◀ ▶ xem lại các câu trước; ✕ chỉ ẩn khung, lịch sử vẫn còn.
-- Chữ chọn được bằng chuột để copy.
+Kiểu "phụ đề": chữ TRẮNG ĐẬM có viền ĐEN, nền trong suốt (chế độ ghost, Windows) nên đọc được trên mọi nền.
+- Nhỏ gọn, tự co giãn theo độ dài câu trả lời (mọc lên phía trên, góc dưới phải giữ nguyên).
+- Hàng đầu: số thứ tự/model, rồi các nút: Copy (chép đáp án), ‹ › (xem câu trước/sau), ◐ (đổi độ mờ), × (ẩn).
+- Kéo hàng đầu để dời chỗ. Không cướp focus của app đang dùng (Windows).
+- Quá dài thì cuộn bằng con lăn chuột.
 """
-import re
 import sys
 import tkinter as tk
 import tkinter.font as tkfont
 
-BG, BAR, FG, DIM = "#1e1e2e", "#2a2a3e", "#e8e8f0", "#9a9ab0"
-ACCENT, ERR, OK, WARN = "#7aa2f7", "#f7768e", "#9ece6a", "#e0af68"
+WHITE, BLACK = "#ffffff", "#000000"
+GHOST_KEY = "#010101"  # màu "đục lỗ": mọi điểm ảnh màu này trở nên trong suốt (Windows -transparentcolor)
+OPACITY_STEPS = (1.0, 0.85, 0.7, 0.55, 0.4, 0.25)
 # Chỉ dùng ký tự trong BMP: Tk 8.6 trên Windows hiển thị emoji ngoài BMP (📸, 🔍...) thành ô vuông hoặc báo lỗi
 STATUS_TEXT = {"capturing": "⏳ Đang chụp màn hình…", "asking": "⏳ Đang hỏi AI…", "reviewing": "⏳ Đang kiểm tra lại…"}
 
 
+def compose(entry, index: int, total: int) -> tuple[str, str]:
+    """(tiêu đề, nội dung) của một câu trả lời. Chỉ là chữ thuần nên test được không cần màn hình."""
+    model = entry.info.get("model", "")
+    title = f"{index + 1}/{total}" + (f" · {model}" if model else "")
+    title += {"ok": " · ✔", "fixed": " · đã sửa"}.get(entry.review, "")
+    lines: list[str] = []
+    if entry.text:
+        lines.append(entry.text.replace("**", "").strip("\n"))
+    if entry.review == "fixed":
+        lines.append("↻ Sửa lại: " + entry.fixed_text.replace("**", "").strip("\n"))
+    elif entry.review == "unknown":
+        lines.append("(Kiểm tra lại: không rõ kết quả)")
+    elif entry.review == "failed":
+        lines.append(f"(Không kiểm tra lại được: {entry.review_error})")
+    if entry.status in STATUS_TEXT and not (entry.status == "reviewing" and entry.review == "fixed"):
+        lines.append(STATUS_TEXT[entry.status])
+    if entry.status == "error":
+        lines.append("⚠ " + entry.error)
+    return title, "\n".join(lines)
+
+
 class Popup:
-    def __init__(self, root: tk.Tk, width: int = 460, height: int = 300, margin: int = 16, alpha: float = 0.96) -> None:
+    def __init__(self, root: tk.Tk, width: int = 340, margin: int = 12, alpha: float = 0.96,
+                 ghost: bool = False, max_height_ratio: float = 0.45) -> None:
         self.root = root
-        # Màn hình phóng to 150% thì 460 điểm ảnh trông rất nhỏ: nhân theo tỉ lệ DPI (96 DPI = 100%)
+        self.opacity = min(1.0, max(0.2, alpha))
+        # Màn hình phóng to 150% thì 340 điểm ảnh trông rất nhỏ: nhân theo tỉ lệ DPI (96 DPI = 100%)
         self.scale = max(1.0, root.winfo_fpixels("1i") / 96)
-        self.w, self.h, self.margin = int(width * self.scale), int(height * self.scale), int(margin * self.scale)
+        self.w, self.margin = int(width * self.scale), int(margin * self.scale)
+        self.pad = int(8 * self.scale)
+        self.head_h = int(24 * self.scale)
+        self.outline = 2 if self.scale >= 1.5 else 1
         self.on_prev = self.on_next = self.on_hide = lambda: None
         self.visible = False
+        self.title_text = ""
+        self.body_text = ""
+        self._full_text = ""
 
         self.win = tk.Toplevel(root)
         self.win.withdraw()
         self.win.overrideredirect(True)
         self.win.attributes("-topmost", True)
+        self._apply_opacity()
+        self.ghost = False
+        if ghost:
+            try:
+                self.win.attributes("-transparentcolor", GHOST_KEY)
+                self.ghost = True
+            except tk.TclError:  # hệ điều hành không hỗ trợ (chỉ Windows có): dùng nền đen đặc
+                pass
+        self.bg = GHOST_KEY if self.ghost else BLACK
+        self.win.configure(bg=self.bg)
+
+        family = "Segoe UI" if "Segoe UI" in tkfont.families(root) else "TkDefaultFont"
+        self.f_body = tkfont.Font(root=root, family=family, size=10, weight="bold")
+        self.f_head = tkfont.Font(root=root, family=family, size=9, weight="bold")
+        self.f_btn = tkfont.Font(root=root, family=family, size=12, weight="bold")
+
+        self.head = tk.Canvas(self.win, width=self.w, height=self.head_h, bg=self.bg, highlightthickness=0)
+        self.head.pack(side="top", fill="x")
+        self.body = tk.Canvas(self.win, width=self.w, height=self.head_h, bg=self.bg, highlightthickness=0)
+        self.body.pack(side="top", fill="both", expand=True)
+        self.body.bind("<MouseWheel>", lambda e: self.body.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+        self.body.bind("<Button-4>", lambda e: self.body.yview_scroll(-1, "units"))  # X11
+        self.body.bind("<Button-5>", lambda e: self.body.yview_scroll(1, "units"))
+
+        work = self._work_area()
+        self.max_h = int((work[3] - work[1]) * max_height_ratio)
+        self._x = self._y = 0
+        self._right = max(work[0], work[2] - self.margin)
+        self._bottom = max(work[1], work[3] - self.margin)
+        self.message("")  # dựng khung rỗng + đặt vị trí lần đầu
+
+    # ---------- vẽ chữ có viền ----------
+
+    def _text(self, canvas, x, y, text, font, anchor="nw", width=0, tags=()):
+        """Chữ trắng đậm viền đen: vẽ chữ đen lệch quanh 8 hướng rồi chữ trắng lên trên."""
+        r = self.outline
+        kw = {"font": font, "anchor": anchor, "text": text, "tags": tags}
+        if width:
+            kw["width"] = width
+        for dx in range(-r, r + 1):
+            for dy in range(-r, r + 1):
+                if (dx or dy) and dx * dx + dy * dy <= r * r + 1:
+                    canvas.create_text(x + dx, y + dy, fill=BLACK, **kw)
+        return canvas.create_text(x, y, fill=WHITE, **kw)
+
+    @staticmethod
+    def _fit(font, text: str, max_px: int) -> str:
+        if font.measure(text) <= max_px:
+            return text
+        while len(text) > 1 and font.measure(text + "…") > max_px:
+            text = text[:-1]
+        return text + "…"
+
+    def _button(self, name: str, label: str, right_edge: int, cmd) -> int:
+        """Vẽ một nút ở mép phải `right_edge`, trả về mép trái của nó."""
+        tag = f"btn_{name}"
+        font = self.f_head if len(label) > 1 else self.f_btn
+        self._text(self.head, right_edge, self.head_h // 2, label, font, anchor="e", tags=(tag,))
+        self.head.tag_bind(tag, "<Button-1>", lambda _e: cmd())
+        self.head.tag_bind(tag, "<Enter>", lambda _e: self.head.config(cursor="hand2"))
+        self.head.tag_bind(tag, "<Leave>", lambda _e: self.head.config(cursor=""))
+        return right_edge - font.measure(label) - int(8 * self.scale)
+
+    def _draw_head(self, title: str) -> None:
+        self.head.delete("all")
+        self.title_text = title
+        x = self.w - self.pad
+        for name, label, cmd in (("hide", "×", lambda: self.on_hide()), ("fade", "◐", lambda: self.cycle_opacity()),
+                                 ("next", "›", lambda: self.on_next()), ("prev", "‹", lambda: self.on_prev()),
+                                 ("copy", "Copy", lambda: self.copy())):
+            x = self._button(name, label, x, cmd)
+        shown = self._fit(self.f_head, title, max(x - self.pad, 20))
+        self._text(self.head, self.pad, self.head_h // 2, shown, self.f_head, anchor="w", tags=("drag",))
+        self.head.tag_bind("drag", "<ButtonPress-1>", self._drag_start)
+        self.head.tag_bind("drag", "<B1-Motion>", self._drag_move)
+
+    def _draw_body(self, text: str) -> None:
+        at_bottom = self.body.yview()[1] >= 0.999
+        self.body_text = text
+        self.body.delete("all")
+        inner = self.w - 2 * self.pad
+        self._text(self.body, self.pad, 2, text, self.f_body, width=inner)
+        content_h = (self.body.bbox("all") or (0, 0, 0, 0))[3] + self.pad
+        view_h = min(max(content_h, int(20 * self.scale)), self.max_h)
+        self.body.config(height=view_h, scrollregion=(0, 0, self.w, content_h))
+        self._resize(self.head_h + view_h)
+        self.win.update_idletasks()  # để yview tính theo kích thước mới
+        if content_h <= view_h:
+            self.body.yview_moveto(0.0)
+        elif at_bottom:
+            self.body.yview_moveto(1.0)  # đang stream thì tự cuộn xuống cuối; đang cuộn lên đọc thì giữ nguyên
+
+    def _resize(self, height: int) -> None:
+        """Giữ nguyên góc dưới phải, khung mọc lên phía trên khi chữ dài ra."""
+        self.win.geometry(f"{self.w}x{height}+{self._right - self.w}+{self._bottom - height}")
+
+    # ---------- nội dung ----------
+
+    def message(self, text: str) -> None:
+        self._draw_head("Highlight AI")
+        self._full_text = text
+        self._draw_body(text)
+
+    def render(self, entry, index: int, total: int) -> None:
+        title, body = compose(entry, index, total)
+        self._draw_head(title)
+        self._full_text = entry.text.replace("**", "")  # nút Copy chép đáp án, không kèm dòng trạng thái
+        if entry.review == "fixed" and entry.fixed_text:
+            self._full_text = entry.fixed_text.replace("**", "")  # bản đã sửa mới là đáp án cuối
+        self._draw_body(body)
+
+    def copy(self) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self._full_text.strip())
+
+    # ---------- độ trong suốt ----------
+
+    def _apply_opacity(self) -> None:
         try:
-            self.win.attributes("-alpha", alpha)
+            self.win.attributes("-alpha", self.opacity)
         except tk.TclError:
             pass
-        self.win.configure(bg=BG, highlightbackground=ACCENT, highlightthickness=1)
 
-        bar = tk.Frame(self.win, bg=BAR)
-        bar.pack(fill="x")
-        self.title = tk.Label(bar, text="Highlight AI", bg=BAR, fg=ACCENT, anchor="w", padx=8, pady=4,
-                              font=("Segoe UI", 9, "bold"))
-        self.title.pack(side="left", fill="x", expand=True)
-        for text, cmd in (("×", lambda: self.on_hide()), ("›", lambda: self.on_next()), ("‹", lambda: self.on_prev())):
-            b = tk.Label(bar, text=text, bg=BAR, fg=FG, padx=8, pady=4, cursor="hand2", font=("Segoe UI", 12, "bold"))
-            b.pack(side="right")
-            b.bind("<Button-1>", lambda _e, c=cmd: c())
-        for widget in (bar, self.title):
-            widget.bind("<ButtonPress-1>", self._drag_start)
-            widget.bind("<B1-Motion>", self._drag_move)
+    def set_opacity(self, value: float) -> None:
+        self.opacity = min(1.0, max(0.2, value))
+        self._apply_opacity()
 
-        body = tk.Frame(self.win, bg=BG)
-        body.pack(fill="both", expand=True)
-        self.scroll = tk.Scrollbar(body, orient="vertical")
-        self.scroll.pack(side="right", fill="y")
-        family = "Segoe UI" if "Segoe UI" in tkfont.families(root) else "TkDefaultFont"
-        self.text = tk.Text(body, wrap="word", bg=BG, fg=FG, insertbackground=FG, relief="flat", padx=10, pady=8,
-                            font=(family, 11), yscrollcommand=self.scroll.set, cursor="arrow", spacing3=3)
-        self.text.pack(side="left", fill="both", expand=True)
-        self.scroll.config(command=self.text.yview)
-        self.text.tag_configure("dim", foreground=DIM, font=(family, 9))
-        self.text.tag_configure("bold", font=(family, 11, "bold"))
-        self.text.tag_configure("err", foreground=ERR)
-        self.text.tag_configure("ok", foreground=OK, font=(family, 9))
-        self.text.tag_configure("warn", foreground=WARN, font=(family, 10, "bold"))
-        self.text.tag_configure("status", foreground=ACCENT)
-        # Chỉ cho chọn/copy, không cho gõ vào
-        self.text.bind("<Key>", lambda e: None if (e.state & 0x4 and e.keysym.lower() in "ca") else "break")
-
-        self._x = self._y = 0
-        self._place()
+    def cycle_opacity(self) -> None:
+        """Bấm nút ◐: đậm hơn -> mờ dần qua từng mức, hết mức mờ nhất thì quay về đậm nhất."""
+        lower = [v for v in OPACITY_STEPS if v < self.opacity - 0.01]
+        self.set_opacity(lower[0] if lower else OPACITY_STEPS[0])
 
     # ---------- vị trí / hiện ẩn ----------
 
@@ -84,17 +207,13 @@ class Popup:
                 pass
         return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
 
-    def _place(self) -> None:
-        left, top, right, bottom = self._work_area()
-        x = max(left, right - self.w - self.margin)
-        y = max(top, bottom - self.h - self.margin)
-        self.win.geometry(f"{self.w}x{self.h}+{x}+{y}")
-
     def _drag_start(self, e) -> None:
         self._x, self._y = e.x_root - self.win.winfo_x(), e.y_root - self.win.winfo_y()
 
     def _drag_move(self, e) -> None:
-        self.win.geometry(f"+{e.x_root - self._x}+{e.y_root - self._y}")
+        x, y = e.x_root - self._x, e.y_root - self._y
+        self.win.geometry(f"+{x}+{y}")
+        self._right, self._bottom = x + self.w, y + self.win.winfo_height()
 
     def _no_activate(self) -> None:
         """Windows: khung hiện ra không cướp focus bàn phím của app đang dùng."""
@@ -124,51 +243,3 @@ class Popup:
             self.win.withdraw()
             self.win.update_idletasks()  # xóa khung khỏi màn hình ngay (để chụp màn hình không dính khung)
             self.visible = False
-
-    # ---------- nội dung ----------
-
-    def _set(self, title: str, parts: list[tuple[str, str]], keep_scroll: bool = False) -> None:
-        y = self.text.yview()
-        at_bottom = y[1] >= 0.999
-        self.title.config(text=title)
-        self.text.config(state="normal")
-        self.text.delete("1.0", "end")
-        for chunk, tag in parts:
-            if tag:
-                self.text.insert("end", chunk, tag)
-                continue
-            for i, piece in enumerate(re.split(r"\*\*(.+?)\*\*", chunk, flags=re.S)):  # **đậm** -> chữ đậm
-                if piece:
-                    self.text.insert("end", piece, "bold" if i % 2 else ())
-        if keep_scroll and not at_bottom:
-            self.text.yview_moveto(y[0])
-        else:
-            self.text.see("end")  # đang stream thì tự cuộn xuống cuối
-        # giữ state normal để còn chọn/copy; việc chặn gõ do bind <Key>
-
-    def message(self, text: str) -> None:
-        self._set("Highlight AI", [(text, "dim")])
-
-    def render(self, entry, index: int, total: int) -> None:
-        model = entry.info.get("model", "")
-        title = f"Highlight AI · {index + 1}/{total}" + (f" · {model}" if model else "")
-        title += {"ok": " · ✔", "fixed": " · đã sửa"}.get(entry.review, "")
-        parts: list[tuple[str, str]] = []
-        if entry.size:
-            parts.append((f"Ảnh {entry.size}\n", "dim"))
-        if entry.text:
-            parts.append((entry.text, ""))
-        if entry.review == "ok":
-            parts.append(("\n\n✔ Đã kiểm tra lại: đáp án khớp.", "ok"))
-        elif entry.review == "fixed":
-            parts.append(("\n\n↻ Kiểm tra lại thấy bản trên có lỗi. Bản đã sửa:\n", "warn"))
-            parts.append((entry.fixed_text, ""))
-        elif entry.review == "unknown":
-            parts.append(("\n\n(Kiểm tra lại: không rõ kết quả, hãy tự xem lại bản trên.)", "dim"))
-        elif entry.review == "failed":
-            parts.append((f"\n\n(Không kiểm tra lại được: {entry.review_error})", "dim"))
-        if entry.status in STATUS_TEXT and not (entry.status == "reviewing" and entry.review == "fixed"):
-            parts.append((("\n" if entry.text else "") + STATUS_TEXT[entry.status], "status"))
-        if entry.status == "error":
-            parts.append((("\n\n" if entry.text else "") + "⚠ " + entry.error, "err"))
-        self._set(title, parts, keep_scroll=True)

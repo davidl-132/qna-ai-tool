@@ -273,46 +273,114 @@ class ControllerFlow(unittest.TestCase):
         self.assertEqual(view.rendered[2], 0)
 
 
+class ComposeText(unittest.TestCase):
+    def entry(self, **kw):
+        from desktop.controller import Entry
+
+        e = Entry(created=0, mode="answer")
+        for k, v in kw.items():
+            setattr(e, k, v)
+        return e
+
+    def test_title_and_body_basic(self):
+        from desktop.popup import compose
+
+        e = self.entry(text="**B**", status="done", info={"model": "m1"})
+        self.assertEqual(compose(e, 1, 3), ("2/3 · m1", "B"))  # dấu ** được bỏ, không kèm câu hỏi/giải thích
+
+    def test_status_and_error_lines(self):
+        from desktop.popup import compose
+
+        self.assertEqual(compose(self.entry(status="asking"), 0, 1)[1], "⏳ Đang hỏi AI…")
+        self.assertEqual(compose(self.entry(status="error", error="hỏng"), 0, 1)[1], "⚠ hỏng")
+
+    def test_review_marks(self):
+        from desktop.popup import compose
+
+        ok = compose(self.entry(text="B", status="done", review="ok"), 0, 1)
+        self.assertEqual(ok, ("1/1 · ✔", "B"))  # đã khớp thì không thêm dòng nào, chỉ dấu ✔
+        fixed = compose(self.entry(text="B", status="done", review="fixed", fixed_text="**C**"), 0, 1)
+        self.assertEqual(fixed, ("1/1 · đã sửa", "B\n↻ Sửa lại: C"))
+        self.assertIn("không kiểm tra lại được: hết lượt".lower(),
+                      compose(self.entry(text="B", review="failed", review_error="hết lượt"), 0, 1)[1].lower())
+
+
 @unittest.skipUnless(os.environ.get("DISPLAY") or os.name == "nt", "cần màn hình để thử tkinter")
 class PopupWidget(unittest.TestCase):
-    def test_render_show_hide(self):
+    def setUp(self):
         try:
             import tkinter as tk
-            from desktop.popup import Popup
 
-            root = tk.Tk()
+            self.root = tk.Tk()
         except Exception as e:  # noqa: BLE001
             self.skipTest(f"không có tkinter/màn hình: {e}")
-        root.withdraw()
-        try:
-            from desktop.controller import Entry
+        self.root.withdraw()
 
-            p = Popup(root)
-            self.assertFalse(p.visible)
-            p.show(); self.assertTrue(p.visible)
-            e = Entry(created=0, mode="answer", text="Xin chào\nđáp án", status="asking", size="4×3, 1 KB")
-            e.info["model"] = "m1"
-            p.render(e, 1, 3)
-            body = p.text.get("1.0", "end")
-            self.assertIn("đáp án", body)
-            e.text = "**Đậm** thường"
-            p.render(e, 1, 3)
-            self.assertNotIn("**", p.text.get("1.0", "end"))
-            self.assertIn("bold", p.text.tag_names("2.0"))
-            self.assertIn("Đang hỏi AI", body)
-            self.assertIn("2/3 · m1", p.title.cget("text"))
-            e.status, e.error = "error", "hỏng"
-            p.render(e, 0, 1)
-            self.assertIn("⚠ hỏng", p.text.get("1.0", "end"))
-            p.message("trống")
-            self.assertIn("trống", p.text.get("1.0", "end"))
-            p.hide(); self.assertFalse(p.visible)
-            # khung nằm trong màn hình, ở góc dưới phải
-            p.show(); root.update()
-            self.assertGreaterEqual(p.win.winfo_x(), root.winfo_screenwidth() // 2)
-            self.assertGreaterEqual(p.win.winfo_y(), root.winfo_screenheight() // 2)
-        finally:
-            root.destroy()
+    def tearDown(self):
+        self.root.destroy()
+
+    def test_render_show_hide_and_corner_position(self):
+        from desktop.controller import Entry
+        from desktop.popup import Popup
+
+        p = Popup(self.root)
+        self.assertFalse(p.visible)
+        p.show()
+        self.assertTrue(p.visible)
+        e = Entry(created=0, mode="answer", text="**B**", status="asking", info={"model": "m1"})
+        p.render(e, 1, 3)
+        self.assertEqual(p.title_text, "2/3 · m1")
+        self.assertIn("Đang hỏi AI", p.body_text)
+        self.assertIn("B", p.body_text)
+        p.message("trống")
+        self.assertEqual(p.body_text, "trống")
+        p.hide()
+        self.assertFalse(p.visible)
+        p.show()
+        self.root.update()
+        right, bottom = p.win.winfo_x() + p.win.winfo_width(), p.win.winfo_y() + p.win.winfo_height()
+        self.assertLessEqual(right, self.root.winfo_screenwidth())
+        self.assertGreaterEqual(right, self.root.winfo_screenwidth() - 2 * p.margin)  # sát mép phải
+        self.assertGreaterEqual(bottom, self.root.winfo_screenheight() - 2 * p.margin)  # sát mép dưới
+
+    def test_grows_upward_with_long_text_and_keeps_corner(self):
+        from desktop.controller import Entry
+        from desktop.popup import Popup
+
+        p = Popup(self.root)
+        p.show()
+        p.render(Entry(created=0, mode="answer", text="B", status="done"), 0, 1)
+        self.root.update()
+        h1, bottom1 = p.win.winfo_height(), p.win.winfo_y() + p.win.winfo_height()
+        p.render(Entry(created=0, mode="answer", text="\n".join(f"{i}. A" for i in range(1, 9)), status="done"), 0, 1)
+        self.root.update()
+        self.assertGreater(p.win.winfo_height(), h1)  # nhiều dòng thì khung cao hơn
+        self.assertEqual(p.win.winfo_y() + p.win.winfo_height(), bottom1)  # nhưng đáy không dịch chuyển
+
+    def test_very_long_text_is_capped_and_scrollable(self):
+        from desktop.controller import Entry
+        from desktop.popup import Popup
+
+        p = Popup(self.root, max_height_ratio=0.3)
+        p.show()
+        p.render(Entry(created=0, mode="answer", text="\n".join(f"dòng {i}" for i in range(200)), status="done"), 0, 1)
+        self.root.update()
+        self.assertLessEqual(p.win.winfo_height(), int(self.root.winfo_screenheight() * 0.3) + p.head_h + 2)
+        self.assertLess(p.body.yview()[1] - p.body.yview()[0], 1.0)  # chỉ thấy một phần, còn lại cuộn
+
+    def test_copy_puts_answer_on_clipboard(self):
+        from desktop.controller import Entry
+        from desktop.popup import Popup
+
+        p = Popup(self.root)
+        e = Entry(created=0, mode="answer", text="**B**", status="done", review="fixed", fixed_text="**C**")
+        p.render(e, 0, 1)
+        p.copy()
+        self.assertEqual(self.root.clipboard_get(), "C")  # có bản sửa thì chép bản sửa
+        e.review = "ok"
+        p.render(e, 0, 1)
+        p.copy()
+        self.assertEqual(self.root.clipboard_get(), "B")  # không kèm dòng trạng thái
 
 
 if __name__ == "__main__":

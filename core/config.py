@@ -50,6 +50,9 @@ HOTKEY_CAPTURE = _get("HOTKEY_CAPTURE", "ctrl+alt+3")
 HOTKEY_TOGGLE = _get("HOTKEY_TOGGLE", "ctrl+alt+0")  # bật/tắt các phím trên; để trống = không dùng
 # Vòng tự kiểm tra: AI viết nháp rồi xem lại ảnh một lượt nữa (tốn thêm 1 lượt gọi AI mỗi lần chụp)
 AGENT_REVIEW = _get("AGENT_REVIEW", "1").lower() in ("1", "true", "yes", "on")
+# Độ đậm của khung popup (1.0 = đặc, 0.2 = rất mờ) và chế độ "ghost" (Windows, mặc định BẬT): nền biến mất, chỉ còn chữ
+POPUP_OPACITY = float(_get("POPUP_OPACITY", "0.96"))
+POPUP_GHOST = _get("POPUP_GHOST", "1").lower() in ("1", "true", "yes", "on")
 POPUP_AUTO_SHOW = _get("POPUP_AUTO_SHOW", "0").lower() in ("1", "true", "yes", "on")
 
 # Ngôn ngữ trả lời mặc định

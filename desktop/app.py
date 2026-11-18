@@ -29,6 +29,8 @@ def main() -> None:
     ap.add_argument("--lang", default=config.DEFAULT_LANG)
     ap.add_argument("--no-review", action="store_true", default=not config.AGENT_REVIEW,
                     help="tắt vòng tự kiểm tra (chỉ 1 lượt gọi AI, nhanh hơn)")
+    ap.add_argument("--solid", action="store_true",
+                    help="dùng khung đặc thay cho chế độ ghost (mặc định: ghost, nền trong suốt, chỉ còn chữ)")
     ap.add_argument("--auto-show", action="store_true", default=config.POPUP_AUTO_SHOW,
                     help="tự hiện khung khi chụp xong (mặc định: chỉ hiện khi bấm phím 'hiện')")
     args = ap.parse_args()
@@ -49,7 +51,7 @@ def main() -> None:
     root.withdraw()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # in được tiếng Việt/emoji, không crash vì mã hóa
-    popup = Popup(root)
+    popup = Popup(root, alpha=config.POPUP_OPACITY, ghost=config.POPUP_GHOST and not args.solid)
     ctl = Controller(popup, capture_png, mode=args.mode, question=args.question, lang=args.lang,
                      auto_show=args.auto_show, review=not args.no_review, capture_key=_pretty(keys["capture"]))
     popup.on_hide, popup.on_prev, popup.on_next = ctl.hide, ctl.prev, ctl.next
