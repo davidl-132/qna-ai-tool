@@ -6,6 +6,7 @@ AI trả lời cho thứ bạn đang đọc, theo 2 cách:
 |---|---|---|---|
 | 🌐 | **Extension Chrome** | Bôi đen chữ trên web → AI giải thích / dịch / tóm tắt / giải bài cạnh vùng chọn | [HUONG_DAN_EXTENSION.md](HUONG_DAN_EXTENSION.md) |
 | 📷 | **Chụp ảnh (desktop)** | Win+Shift+S ở bất kỳ đâu trên máy → AI đọc ảnh và trả lời | [HUONG_DAN_CHUP_ANH.md](HUONG_DAN_CHUP_ANH.md) |
+| 🪟 | **App popup (desktop)** | Ctrl+Alt+3 chụp màn hình, Ctrl+Alt+1/2 hiện/ẩn khung đáp án nhỏ, có lịch sử | [HUONG_DAN_POPUP.md](HUONG_DAN_POPUP.md) |
 
 **Đọc [HUONG_DAN.md](HUONG_DAN.md) trước** (cài Python, lấy key, cài thư viện, điền `.env`), rồi đọc hướng dẫn của cách dùng bạn chọn.
 
@@ -31,6 +32,7 @@ python -m scripts.test_models      :: xem model nào dùng được → điền 
 
 python -m api.main                 :: 🌐 extension (cần thêm bước nạp extension, xem hướng dẫn)
 python -m desktop.watcher          :: 📷 chụp ảnh
+python -m desktop.app              :: 🪟 app popup (phím tắt)
 ```
 
 Chưa có key? Đặt `PROVIDER=mock` và `FALLBACK_PROVIDER=` trong `.env` để chạy thử với câu trả lời giả.
@@ -76,6 +78,11 @@ extension/     Chrome extension (Manifest V3)
 desktop/       app chụp ảnh (Windows)
   clipboard.py   đọc ảnh từ clipboard bằng ctypes, đổi sang PNG bằng zlib
   watcher.py     theo dõi clipboard, gọi AI
+  app.py         app popup: phím tắt + khung đáp án (python -m desktop.app)
+  controller.py  điều khiển app popup: lịch sử, ẩn/hiện, chụp + hỏi AI
+  popup.py       khung đáp án tkinter ở góc màn hình
+  hotkeys.py     phím tắt toàn cục (RegisterHotKey)
+  screen.py      chụp màn hình bằng ctypes
   ui.py          giao diện terminal: khung màu bằng thư viện rich (hoặc chữ thường với --plain)
 scripts/       công cụ chạy thử trong terminal
   list_models.py   liệt kê model Gemini

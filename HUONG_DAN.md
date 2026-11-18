@@ -1,11 +1,12 @@
 # Highlight AI — Cài đặt (đọc file này trước)
 
-Highlight AI là công cụ hỏi AI nhanh về thứ bạn đang đọc. Có **2 cách dùng**:
+Highlight AI là công cụ hỏi AI nhanh về thứ bạn đang đọc. Có **3 cách dùng**:
 
 | | Cách dùng | Làm gì |
 |---|---|---|
 | 🌐 | **Extension Chrome** | Bôi đen chữ trên trang web → AI trả lời ngay cạnh |
 | 📷 | **Chụp ảnh** | Bấm Win+Shift+S ở bất kỳ đâu trên máy → AI đọc ảnh và trả lời |
+| 🪟 | **App popup** | Phím tắt chụp màn hình + khung đáp án nhỏ ở góc màn hình, có lịch sử |
 
 **Cách làm:** cài đặt xong file này (một lần), rồi chọn cách dùng bạn cần ở [Bước cuối](#xong-chọn-cách-dùng) và đọc hướng dẫn riêng của cách đó.
 
@@ -145,6 +146,7 @@ Chưa có key mà muốn xem thử? Đặt `PROVIDER=mock` và `FALLBACK_PROVIDE
 |---|---|
 | 🌐 Bôi đen chữ trên web rồi hỏi AI | [HUONG_DAN_EXTENSION.md](HUONG_DAN_EXTENSION.md) |
 | 📷 Chụp màn hình (Win+Shift+S) rồi AI trả lời đáp án | [HUONG_DAN_CHUP_ANH.md](HUONG_DAN_CHUP_ANH.md) |
+| 🪟 Phím tắt chụp màn hình, đáp án hiện ở khung nhỏ góc màn hình | [HUONG_DAN_POPUP.md](HUONG_DAN_POPUP.md) |
 
 Hai cách độc lập với nhau; bạn có thể dùng một hoặc cả hai.
 

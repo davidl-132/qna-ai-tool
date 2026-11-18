@@ -43,6 +43,13 @@ MAX_CONTEXT_CHARS = int(_get("MAX_CONTEXT_CHARS", "1500"))
 # Ảnh chụp màn hình: giới hạn dung lượng gửi đi (byte)
 MAX_IMAGE_BYTES = int(_get("MAX_IMAGE_BYTES", "7000000"))
 
+# App popup (desktop/app.py): phím tắt toàn cục và hành vi khung đáp án
+HOTKEY_SHOW = _get("HOTKEY_SHOW", "ctrl+alt+1")
+HOTKEY_HIDE = _get("HOTKEY_HIDE", "ctrl+alt+2")
+HOTKEY_CAPTURE = _get("HOTKEY_CAPTURE", "ctrl+alt+3")
+HOTKEY_TOGGLE = _get("HOTKEY_TOGGLE", "ctrl+alt+0")  # bật/tắt các phím trên; để trống = không dùng
+POPUP_AUTO_SHOW = _get("POPUP_AUTO_SHOW", "0").lower() in ("1", "true", "yes", "on")
+
 # Ngôn ngữ trả lời mặc định
 DEFAULT_LANG = _get("DEFAULT_LANG", "vi")
 
