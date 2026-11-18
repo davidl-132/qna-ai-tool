@@ -7,7 +7,7 @@ AI trả lời cho thứ bạn đang đọc, theo 2 cách:
 | 🌐 | **Extension Chrome** | Bôi đen chữ trên web → AI giải thích / dịch / tóm tắt / giải bài cạnh vùng chọn | [HUONG_DAN_EXTENSION.md](HUONG_DAN_EXTENSION.md) |
 | 📷 | **Chụp ảnh (desktop)** | Win+Shift+S ở bất kỳ đâu trên máy → AI đọc ảnh và trả lời | [HUONG_DAN_CHUP_ANH.md](HUONG_DAN_CHUP_ANH.md) |
 
-Cài đặt chung (Python, `.env`, chọn model, lỗi thường gặp, sửa prompt): xem [HUONG_DAN.md](HUONG_DAN.md).
+**Đọc [HUONG_DAN.md](HUONG_DAN.md) trước** (cài Python, lấy key, cài thư viện, điền `.env`), rồi đọc hướng dẫn của cách dùng bạn chọn.
 
 - **`core/`** chứa toàn bộ logic AI, dùng chung cho cả hai cách.
 - **Gemini** là nhà cung cấp mặc định. **Groq** (hoặc Grok của xAI) tự động dự phòng khi Gemini lỗi (quá tải, hết quota, sai key...). Gemini cũng tự thử lại và đổi model dự phòng khi gặp lỗi tạm thời.
@@ -75,7 +75,8 @@ extension/     Chrome extension (Manifest V3)
   options.*      cài đặt + lịch sử
 desktop/       app chụp ảnh (Windows)
   clipboard.py   đọc ảnh từ clipboard bằng ctypes, đổi sang PNG bằng zlib
-  watcher.py     theo dõi clipboard, gọi AI, in câu trả lời
+  watcher.py     theo dõi clipboard, gọi AI
+  ui.py          giao diện terminal: khung màu bằng thư viện rich (hoặc chữ thường với --plain)
 scripts/       công cụ chạy thử trong terminal
   list_models.py   liệt kê model Gemini
   test_models.py   thử gọi từng model xem cái nào dùng được

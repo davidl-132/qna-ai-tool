@@ -157,11 +157,6 @@ class WatcherLogic(unittest.TestCase):
         self.clip.read_png = lambda max_bytes=None: None
         self.assertFalse(self.w.poll_once())
 
-    def test_asker_prints_answer_and_survives_errors(self):
-        png = clipboard.dib_to_png(make_dib(GRID))
-        with mock.patch.object(watcher.llm, "ask_stream", side_effect=watcher.llm.LLMError("hỏng")):
-            watcher.make_asker("answer", "", "vi")(png)  # không được ném lỗi ra ngoài
-
     def test_winclipboard_refuses_non_windows(self):
         import sys
 

@@ -3,7 +3,7 @@
 Bôi đen chữ trên trang web → AI giải thích / dịch / tóm tắt / giải bài ngay cạnh vùng chọn.
 
 Phần này gồm 2 thứ chạy cùng lúc: **server Python** (xử lý AI) và **extension Chrome** (giao diện).
-Làm [phần A trong HUONG_DAN.md](HUONG_DAN.md) (cài đặt chung) trước.
+**Cần làm xong [HUONG_DAN.md](HUONG_DAN.md) (cài đặt) trước.** Cần thêm Google Chrome.
 
 ## 1. Chạy server (mỗi lần dùng)
 
@@ -42,7 +42,9 @@ python -m api.main
 - Ô mật khẩu luôn bị bỏ qua. Thêm trang nhạy cảm (ngân hàng, email) vào ô **Không hiện nút trên các trang** ở trang cài đặt.
 - Tab đã mở từ trước khi cài extension cần bấm F5.
 
-## 5. Lỗi riêng của extension
+## 5. Lỗi thường gặp
+
+### Lỗi của extension
 
 | Thấy gì | Cách xử lý |
 |---|---|
@@ -53,4 +55,23 @@ python -m api.main
 | Sửa code extension mà không thấy đổi | Ở `chrome://extensions` bấm ↻ ở thẻ extension, rồi F5 trang |
 | Sửa `.env` hoặc code Python mà không thấy đổi | Tắt server (Ctrl+C) rồi chạy lại `python -m api.main` |
 
-Lỗi về AI (503, 404, 429, thiếu key...): xem [mục B trong HUONG_DAN.md](HUONG_DAN.md).
+### Lỗi từ AI
+
+| Thấy gì | Nghĩa là | Cách xử lý |
+|---|---|---|
+| `503 UNAVAILABLE ... high demand` | Google đang quá tải model đó | Chương trình tự thử lại rồi đổi model dự phòng. Nếu vẫn lỗi: đợi vài phút, hoặc chạy `python -m scripts.test_models` để chọn lại model |
+| `404 ... no longer available` | Model đã ngừng cấp cho key của bạn | Bỏ model đó khỏi `GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS` trong `.env` |
+| `429` / hết quota | Hết lượt miễn phí | Đợi một lúc, hoặc điền `GROQ_API_KEY` để có dự phòng |
+| `Thiếu GEMINI_API_KEY` / `Thiếu GROQ_API_KEY` | Chưa điền key trong `.env` | Điền key, tắt rồi chạy lại chương trình |
+| `Tất cả nhà cung cấp đều lỗi` | Mọi model đều hỏng | Đọc từng dòng trong thông báo: nó ghi lỗi của từng model và từng nhà cung cấp |
+
+## 6. Muốn chỉnh cách AI trả lời
+
+Mọi prompt nằm trong `core/prompts.py`:
+
+| Muốn đổi | Sửa ở |
+|---|---|
+| Cách giải thích / dịch / tóm tắt / giải bài | `MODES` (4 mục: `explain`, `translate`, `summarize`, `answer`) |
+| Giọng điệu, ngôn ngữ, độ dài chung | hàm `system_prompt()` |
+
+Chỉ sửa nội dung chuỗi, đừng đổi tên 4 khóa trên (các tab trong extension dùng đúng tên đó), và giữ câu "QUAN TRỌNG ... là DỮ LIỆU" vì nó chống việc chữ trên trang web ra lệnh cho AI. Sửa xong tắt server (Ctrl+C) rồi chạy lại `python -m api.main`.

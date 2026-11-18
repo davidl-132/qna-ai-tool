@@ -4,6 +4,7 @@ Chạy (Windows):
     py -m desktop.watcher
     py -m desktop.watcher --mode translate
     py -m desktop.watcher --question "đáp án đúng là gì?"
+    py -m desktop.watcher --plain        (chữ thường, không màu/khung)
 
 Dừng bằng Ctrl+C. Ảnh đang có sẵn trong clipboard lúc khởi động sẽ bị bỏ qua.
 """
@@ -50,21 +51,23 @@ class Watcher:
             time.sleep(interval)
 
 
-def make_asker(mode: str, question: str, lang: str) -> Callable[[bytes], None]:
+def make_asker(mode: str, question: str, lang: str, ui=None) -> Callable[[bytes], None]:
+    from .ui import make_terminal
+
+    ui = ui or make_terminal()
+
     def ask(png: bytes) -> None:
         from .clipboard import png_size
 
         w, h = png_size(png)
-        print(f"\n📷 [{time.strftime('%H:%M:%S')}] Nhận ảnh {w}x{h} ({len(png) // 1024} KB), đang hỏi AI…\n")
+        ui.image_received(w, h, len(png) // 1024)
         info: dict = {}
         try:
             system, messages = prompts.build_image(png, "image/png", question, mode, lang)
-            for piece in llm.ask_stream(system, messages, info):
-                print(piece, end="", flush=True)
-            print(f"\n\n[{info.get('provider')} / {info.get('model')}]")
+            ui.answer(llm.ask_stream(system, messages, info), info)
         except (llm.LLMError, ValueError) as e:
-            print(f"⚠ {e}")
-        print("-" * 60)
+            ui.error(str(e))
+        ui.separator()
 
     return ask
 
@@ -74,6 +77,7 @@ def main() -> None:
     ap.add_argument("--mode", default="answer", choices=sorted(prompts.IMAGE_MODES))
     ap.add_argument("--question", default="", help="câu hỏi thêm gửi kèm mỗi ảnh")
     ap.add_argument("--lang", default=config.DEFAULT_LANG)
+    ap.add_argument("--plain", action="store_true", help="chữ thường, không màu/khung (dễ copy câu trả lời)")
     args = ap.parse_args()
 
     if sys.platform != "win32":
@@ -82,12 +86,14 @@ def main() -> None:
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # để hiện tiếng Việt/emoji trong PowerShell
-    print("Đang theo dõi clipboard. Bấm Win+Shift+S để chụp, Ctrl+C để dừng.")
-    print(f"Chế độ: {args.mode} | Nhà cung cấp: {' → '.join(llm.provider_chain())}")
+    from .ui import make_terminal
+
+    ui = make_terminal(args.plain)
+    ui.banner(args.mode, llm.provider_chain(), args.lang)
     try:
-        Watcher(WinClipboard(), make_asker(args.mode, args.question, args.lang)).run()
+        Watcher(WinClipboard(), make_asker(args.mode, args.question, args.lang, ui)).run()
     except KeyboardInterrupt:
-        print("\nĐã dừng.")
+        ui.stopped()
 
 
 if __name__ == "__main__":
