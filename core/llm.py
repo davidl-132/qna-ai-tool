@@ -9,7 +9,11 @@ tự động chuyển sang nhà cung cấp dự phòng.
 import base64
 import json
 import logging
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 from typing import Iterable, Iterator
 
 from . import config
@@ -184,6 +188,77 @@ def _stream_grok(system: str, messages: list[dict], used: dict) -> Iterator[str]
     )
 
 
+def _stream_ckey(system: str, messages: list[dict], used: dict) -> Iterator[str]:
+    if not config.CKEY_API_KEY:
+        raise LLMError("Thiếu CKEY_API_KEY trong .env")
+    yield from _stream_openai_compat(
+        "CKey", config.CKEY_API_KEY, config.CKEY_BASE_URL, config.CKEY_MODEL, system, messages, used
+    )
+
+
+def _agy_prompt(system: str, messages: list[dict], image_files: list[str]) -> str:
+    """agy là một agent có prompt hệ thống riêng, nên gộp luật của mình + hội thoại vào một câu lệnh duy nhất."""
+    parts = [system.strip()]
+    for m in messages:
+        who = "Người dùng" if m.get("role") == "user" else "Trợ lý"
+        parts.append(f"{who}: {m['content']}")
+    if image_files:
+        names = ", ".join(image_files)
+        parts.append(f"Ảnh cần xử lý nằm trong thư mục hiện tại: {names}. Hãy mở và xem ảnh đó. "
+                     "Chỉ trả lời câu hỏi, không tạo/sửa/xóa file nào và không chạy lệnh nào.")
+    return "\n\n".join(parts)
+
+
+def _parse_agy_output(out: str) -> str:
+    """`--output-format json` in một object có trường `response`; nếu không phải JSON thì lấy nguyên văn."""
+    out = out.strip()
+    try:
+        data = json.loads(out)
+    except ValueError:
+        return out
+    if isinstance(data, dict) and isinstance(data.get("response"), str):
+        return data["response"].strip()
+    return out
+
+
+def _stream_agy(system: str, messages: list[dict], used: dict) -> Iterator[str]:
+    """Hỏi bằng Antigravity CLI: chạy `agy -p` một lần trong thư mục tạm (ảnh được lưu thành file ở đó).
+
+    Không stream được từng chữ: agy trả cả câu trả lời một lần khi xong.
+    """
+    exe = shutil.which(config.AGY_CMD)
+    if not exe:
+        raise LLMError(f"Không tìm thấy lệnh '{config.AGY_CMD}' (cài Antigravity CLI hoặc đặt AGY_CMD trong .env)")
+    used["model"] = config.AGY_MODEL or "agy"
+    with tempfile.TemporaryDirectory(prefix="highlight-ai-agy-") as tmp:
+        files = []
+        for m in messages:
+            for img in m.get("images") or []:
+                ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif"}.get(img["mime"], "png")
+                name = f"shot{len(files) + 1}.{ext}"
+                with open(os.path.join(tmp, name), "wb") as f:
+                    f.write(img["data"])
+                files.append(name)
+        cmd = [exe, "-p", _agy_prompt(system, messages, files), "--output-format", "json",
+               "--print-timeout", f"{config.AGY_TIMEOUT}s"]
+        if config.AGY_MODEL:
+            cmd += ["--model", config.AGY_MODEL]
+        try:
+            r = subprocess.run(
+                cmd, cwd=tmp, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=config.AGY_TIMEOUT + 15,
+                creationflags=0x08000000 if os.name == "nt" else 0,  # không bật cửa sổ console
+            )
+        except subprocess.TimeoutExpired as e:
+            raise LLMError(f"agy không trả lời sau {config.AGY_TIMEOUT}s (đã dừng)") from e
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout or "").strip()[-300:]
+        raise LLMError(f"agy lỗi (mã {r.returncode}): {tail}")
+    text = _parse_agy_output(r.stdout)
+    if text:
+        yield text
+
+
 def _stream_groq(system: str, messages: list[dict], used: dict) -> Iterator[str]:
     if not config.GROQ_API_KEY:
         raise LLMError("Thiếu GROQ_API_KEY trong .env")
@@ -216,14 +291,37 @@ def _stream_mock(system: str, messages: list[dict], used: dict) -> Iterator[str]
         yield word + " "
 
 
-PROVIDERS = {"gemini": _stream_gemini, "groq": _stream_groq, "grok": _stream_grok, "mock": _stream_mock}
+PROVIDERS = {"gemini": _stream_gemini, "groq": _stream_groq, "grok": _stream_grok, "ckey": _stream_ckey,
+             "agy": _stream_agy, "mock": _stream_mock}
 
 
 def _model_name(provider: str) -> str:
-    return {"gemini": config.GEMINI_MODEL, "groq": config.GROQ_MODEL, "grok": config.XAI_MODEL}.get(provider, provider)
+    return {"gemini": config.GEMINI_MODEL, "groq": config.GROQ_MODEL, "grok": config.XAI_MODEL,
+            "ckey": config.CKEY_MODEL, "agy": config.AGY_MODEL or "agy"}.get(provider, provider)
 
 
 # ---------- Hàm dùng chung ----------
+
+def provider_ready(name: str) -> bool:
+    """Provider đã có đủ cấu hình (key) để gọi chưa."""
+    key = {"gemini": config.GEMINI_API_KEY, "groq": config.GROQ_API_KEY, "grok": config.XAI_API_KEY,
+           "ckey": config.CKEY_API_KEY}.get(name)
+    if name == "agy":
+        return bool(shutil.which(config.AGY_CMD))
+    return name == "mock" or bool(key)
+
+
+def ask_stream_one(name: str, system: str, messages: list[dict], info: dict | None = None) -> Iterator[str]:
+    """Gọi đúng MỘT provider, không tự chuyển sang provider khác (dùng cho chế độ nhiều AI)."""
+    fn = PROVIDERS.get(name)
+    if fn is None:
+        raise LLMError(f"{name}: không hỗ trợ")
+    used: dict = {}
+    for piece in fn(system, messages, used):
+        if info is not None and "model" not in info:
+            info.update(provider=name, model=used.get("model") or _model_name(name))
+        yield piece
+
 
 def provider_chain() -> list[str]:
     chain = [config.PROVIDER]

@@ -68,6 +68,8 @@ core/          logic AI dùng chung (extension + chụp ảnh)
   llm.py         gọi Gemini / Groq / Grok / mock, retry, đổi model, tự chuyển dự phòng, nhận ảnh
   prompts.py     prompt cho chữ (MODES) và cho ảnh (IMAGE_MODES), chống prompt injection
   review.py      vòng tự kiểm tra: nháp rồi xem lại ảnh để xác nhận/sửa (dùng bởi app popup)
+  (llm.py còn có provider `agy`: hỏi bằng Antigravity CLI, thử bằng scripts/try_agy.py)
+  ensemble.py    nhiều AI trả lời song song rồi tổng hợp (đồng ý thì lấy luôn, khác nhau thì trọng tài chốt)
   context.py     làm sạch, cắt ngắn text
   history.py     lịch sử SQLite
 api/           FastAPI server cho extension (token, CORS, SSE)

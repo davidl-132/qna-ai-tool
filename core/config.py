@@ -36,6 +36,22 @@ GROQ_BASE_URL = _get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
 # Model Groq có đọc được ảnh (để trống = Groq chỉ trả lời bằng chữ). Xem console.groq.com/docs/models
 GROQ_VISION_MODEL = _get("GROQ_VISION_MODEL")
 
+# CKey (ckey.vn): cổng API bên thứ ba kiểu OpenAI. Dùng bằng PROVIDER=ckey hoặc FALLBACK_PROVIDER=ckey
+CKEY_API_KEY = _get("CKEY_API_KEY")
+CKEY_MODEL = _get("CKEY_MODEL", "gpt-5.5")  # ghi đúng tên model đang bật trên trang giá của họ; phải là model đọc được ảnh
+CKEY_BASE_URL = _get("CKEY_BASE_URL", "https://api.xah.io/v1")
+
+# Antigravity CLI (lệnh `agy`): dùng PROVIDER=agy hoặc thêm "agy" vào ENSEMBLE_PROVIDERS. Dùng tài khoản đã đăng nhập sẵn
+# trong agy (chạy `agy` một lần để đăng nhập), không cần API key.
+AGY_CMD = _get("AGY_CMD", "agy")  # tên lệnh hoặc đường dẫn đầy đủ tới agy.exe
+AGY_MODEL = _get("AGY_MODEL")  # để trống = model mặc định của agy; xem danh sách bằng `agy models`
+AGY_TIMEOUT = int(_get("AGY_TIMEOUT", "120"))  # giây; quá hạn thì dừng agy và báo lỗi
+
+# Nhiều AI cùng trả lời rồi tổng hợp: chỉ chạy khi có từ 2 provider (dưới đây) đã có key
+ENSEMBLE = _get("ENSEMBLE", "1").lower() in ("1", "true", "yes", "on")
+ENSEMBLE_PROVIDERS = [p.strip().lower() for p in _get("ENSEMBLE_PROVIDERS", "gemini,ckey").split(",") if p.strip()]
+ENSEMBLE_TEXT = _get("ENSEMBLE_TEXT", "1").lower() in ("1", "true", "yes", "on")  # 0 = tra chữ bôi đen chỉ dùng 1 AI cho nhanh
+
 # Giới hạn độ dài để tiết kiệm quota
 MAX_SELECTION_CHARS = int(_get("MAX_SELECTION_CHARS", "4000"))
 MAX_CONTEXT_CHARS = int(_get("MAX_CONTEXT_CHARS", "1500"))

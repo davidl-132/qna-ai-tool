@@ -166,6 +166,32 @@ class GrokHttpx(unittest.TestCase):
         self.assertTrue(seen["body"]["stream"])
         self.assertEqual(seen["body"]["messages"][0]["role"], "system")
 
+    def test_ckey_sends_image_to_configured_base_url_and_model(self):
+        seen = {}
+
+        def handler(req):
+            seen["url"], seen["auth"], seen["body"] = str(req.url), req.headers["authorization"], json.loads(req.content)
+            return httpx.Response(200, content=b'data: {"choices":[{"delta":{"content":"B"}}]}\n\ndata: [DONE]\n\n')
+
+        msgs = [{"role": "user", "content": "q", "images": [{"mime": "image/png", "data": b"\x89PNG"}]}]
+        used = {}
+        with mock.patch.object(config, "CKEY_API_KEY", "kc"), mock.patch.object(config, "CKEY_MODEL", "m-vision"), \
+                mock.patch.object(config, "CKEY_BASE_URL", "https://api.example.test/v1"), \
+                mock.patch.object(llm, "_httpx_client", self._client(handler)):
+            out = "".join(llm._stream_ckey("sys", msgs, used))
+        self.assertEqual(out, "B")
+        self.assertEqual(seen["url"], "https://api.example.test/v1/chat/completions")
+        self.assertEqual(seen["auth"], "Bearer kc")
+        self.assertEqual(seen["body"]["model"], "m-vision")
+        self.assertEqual(seen["body"]["messages"][1]["content"][1]["type"], "image_url")
+        self.assertEqual(used["model"], "m-vision")
+
+    def test_ckey_without_key_and_registered(self):
+        self.assertIn("ckey", llm.PROVIDERS)
+        with mock.patch.object(config, "CKEY_API_KEY", ""):
+            with self.assertRaises(llm.LLMError):
+                list(llm._stream_ckey("s", [{"role": "user", "content": "q"}], {}))
+
     def test_http_error(self):
         handler = lambda req: httpx.Response(401, json={"error": "bad key"})  # noqa: E731
         with mock.patch.object(config, "XAI_API_KEY", "kx"), mock.patch.object(

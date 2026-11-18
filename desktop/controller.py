@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterator
 
-from core import config, llm, prompts, review as review_mod
+from core import config, ensemble, llm, prompts, review as review_mod
 
 
 @dataclass
@@ -19,8 +19,8 @@ class Entry:
     created: float
     mode: str
     question: str = ""
-    status: str = "capturing"  # capturing -> asking -> [reviewing ->] done | error
-    review: str = ""  # "" (chưa/không kiểm tra) | ok | fixed | unknown | failed
+    status: str = "capturing"  # capturing -> asking -> [reviewing | merging ->] done | error
+    review: str = ""  # "" (chưa/không kiểm tra) | ok | fixed | unknown | failed | merged (trọng tài chốt) | solo (chỉ 1 AI trả lời được)
     fixed_text: str = ""  # bản đã sửa, khi kiểm tra thấy nháp sai
     review_error: str = ""
     text: str = ""
@@ -43,6 +43,8 @@ class Controller:
         lang: str = "vi",
         auto_show: bool = False,
         review: bool = False,
+        members: list | None = None,
+        ensemble_text: bool = True,
         hide_delay: float = 0.25,
         capture_key: str = "Left Alt",
         spawn: Callable[[Callable[[], None]], None] | None = None,
@@ -55,6 +57,8 @@ class Controller:
         self.mode, self.question, self.lang = mode, question, lang
         self.auto_show = auto_show
         self.review = review  # bật vòng tự kiểm tra (thêm một lượt gọi AI)
+        self.members = members or []  # [(tên, hàm hỏi 1 AI)]; từ 2 phần tử trở lên thì bật chế độ nhiều AI
+        self.ensemble_text = ensemble_text
         self.hide_delay = hide_delay
         self.capture_key = capture_key
         self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
@@ -127,6 +131,10 @@ class Controller:
             png = self.capture(config.MAX_IMAGE_BYTES)
             put(("captured", entry, png_info(png)))
             system, messages = prompts.build_image(png, "image/png", self.question, self.mode, self.lang)
+            if self._multi():
+                self._ensemble(entry, system, messages, put)
+                put(("done", entry, None))
+                return
             draft = []
             for piece in self.ask_stream(system, messages, entry.info):
                 draft.append(piece)
@@ -143,11 +151,23 @@ class Controller:
         try:
             system, messages = prompts.build(text[: config.MAX_SELECTION_CHARS], self.mode, lang=self.lang)
             put(("captured", entry, f"{len(text)} ký tự"))  # hiện khung + chuyển sang "đang hỏi"
+            if self._multi() and self.ensemble_text:
+                self._ensemble(entry, system, messages, put)
+                put(("done", entry, None))
+                return
             for piece in self.ask_stream(system, messages, entry.info):
                 put(("chunk", entry, piece))
             put(("done", entry, None))  # tra chữ nhanh: không chạy vòng tự kiểm tra
         except Exception as e:  # noqa: BLE001
             put(("error", entry, str(e) or e.__class__.__name__))
+
+    def _multi(self) -> bool:
+        return len(self.members) >= 2
+
+    def _ensemble(self, entry: Entry, system: str, messages: list[dict], put) -> None:
+        """Nhiều AI trả lời song song rồi tổng hợp; thay cho vòng tự kiểm tra (trọng tài đã làm việc đó)."""
+        for kind, data in ensemble.run(self.members, self.ask_stream, system, messages):
+            put((kind, entry, data))
 
     def _review(self, entry: Entry, png: bytes, draft: str, put) -> None:
         """Lượt 2: kiểm tra nháp. Lỗi ở đây không làm mất nháp, chỉ ghi chú là không kiểm tra được."""
@@ -175,6 +195,10 @@ class Controller:
                 entry.text += data
             elif kind == "reviewing":
                 entry.status = "reviewing"
+            elif kind == "merging":
+                entry.status = "merging"
+            elif kind == "meta":
+                entry.info.update(data)
             elif kind == "verdict":
                 entry.review = data
             elif kind == "fix":

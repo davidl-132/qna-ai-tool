@@ -14,14 +14,15 @@ WHITE, BLACK = "#ffffff", "#000000"
 GHOST_KEY = "#010101"  # màu "đục lỗ": mọi điểm ảnh màu này trở nên trong suốt (Windows -transparentcolor)
 OPACITY_STEPS = (1.0, 0.85, 0.7, 0.55, 0.4, 0.25)
 # Chỉ dùng ký tự trong BMP: Tk 8.6 trên Windows hiển thị emoji ngoài BMP (📸, 🔍...) thành ô vuông hoặc báo lỗi
-STATUS_TEXT = {"capturing": "⏳ Đang chụp màn hình…", "asking": "⏳ Đang hỏi AI…", "reviewing": "⏳ Đang kiểm tra lại…"}
+STATUS_TEXT = {"capturing": "⏳ Đang chụp màn hình…", "asking": "⏳ Đang hỏi AI…", "reviewing": "⏳ Đang kiểm tra lại…",
+               "merging": "⏳ Các AI khác nhau, đang tổng hợp…"}
 
 
 def compose(entry, index: int, total: int) -> tuple[str, str]:
     """(tiêu đề, nội dung) của một câu trả lời. Chỉ là chữ thuần nên test được không cần màn hình."""
     model = entry.info.get("model", "")
     title = f"{index + 1}/{total}" + (f" · {model}" if model else "")
-    title += {"ok": " · ✔", "fixed": " · đã sửa"}.get(entry.review, "")
+    title += {"ok": " · ✔", "fixed": " · đã sửa", "merged": " · tổng hợp", "solo": " · 1 AI"}.get(entry.review, "")
     lines: list[str] = []
     if entry.text:
         lines.append(entry.text.replace("**", "").strip("\n"))

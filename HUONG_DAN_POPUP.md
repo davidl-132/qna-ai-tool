@@ -77,6 +77,48 @@ Lúc đang kiểm tra khung ghi `⏳ Đang kiểm tra lại…`, và phải đ�
 
 Tắt vòng này: `AGENT_REVIEW=0` trong `.env`, hoặc chạy `python -m desktop.app --no-review`.
 
+### Nhiều AI cùng trả lời rồi tổng hợp (multi-agent)
+
+Khi có **từ 2 AI trở lên có key** (mặc định `gemini` + `ckey`), mỗi lần hỏi app gọi **cả hai song song**, rồi:
+
+| Kết quả | App làm gì | Tiêu đề khung |
+|---|---|---|
+| Hai AI **đồng ý** (so sánh sau khi bỏ in đậm/dấu câu) | Lấy luôn, không tốn thêm lượt | `· ✔` |
+| Hai AI **khác nhau** | Một lượt **trọng tài** (dùng AI chính) xem lại đề/ảnh gốc cùng các đáp án rồi chốt đáp án cuối, chạy dần từng chữ | `· tổng hợp` |
+| Chỉ một AI trả lời được (AI kia lỗi/hết quota) | Dùng AI còn lại | `· 1 AI` |
+| Cả hai lỗi | Báo lỗi của từng AI | |
+
+Khi bật chế độ này thì **vòng tự kiểm tra (mục 4) không chạy nữa** (trọng tài đã làm việc đó). Trong khung bạn chỉ thấy đáp án cuối; tên model của các AI đã trả lời nằm ở tiêu đề.
+
+Bật: thêm key của từng AI vào `.env` (`GEMINI_API_KEY`, `CKEY_API_KEY`...). Terminal sẽ in `NHIỀU AI: gemini + ckey ...`. Thiếu key của AI nào thì app báo `⚠ Chế độ nhiều AI chưa bật` và chạy 1 AI như cũ.
+
+| Cài đặt (`.env`) | Ý nghĩa |
+|---|---|
+| `ENSEMBLE=0` hoặc `--no-ensemble` | Tắt, chỉ dùng 1 AI |
+| `ENSEMBLE_PROVIDERS=gemini,ckey` | Danh sách AI tham gia (có thể thêm `groq`, `grok`); AI đứng đầu là AI chính, làm trọng tài |
+| `ENSEMBLE_TEXT=0` | Bôi đen tra chữ chỉ dùng 1 AI cho nhanh (tra từ/nghĩa hai AI hiếm khi viết giống hệt nhau nên gần như luôn tốn thêm lượt trọng tài) |
+
+**Đánh đổi:** chờ lâu hơn (bằng AI chậm nhất, cộng một lượt trọng tài nếu khác nhau), tốn gấp 2-3 lượt gọi, và ảnh/chữ của bạn đi tới cả hai nhà cung cấp. Hai AI đồng ý chưa chắc đúng, nhưng khác nhau là dấu hiệu tốt để xem kỹ.
+
+### Dùng Antigravity CLI (`agy`) thay cho API key (thử nghiệm)
+
+App có thể hỏi bằng lệnh `agy -p` (chạy một lần rồi thoát) thay vì gọi API bằng key. Dùng tài khoản bạn đã đăng nhập sẵn trong agy.
+
+**Thử trước khi dùng** (rất nên, vì chưa ai kiểm tra trên máy bạn):
+1. Cài Antigravity CLI, chạy `agy` một lần để đăng nhập.
+2. Trong thư mục dự án: `python -m scripts.try_agy` (thử câu hỏi chữ) rồi `python -m scripts.try_agy test.png` (thử ảnh). Script in thời gian chạy và câu trả lời.
+3. Nếu chạy treo hoặc báo lỗi thì chưa nên dùng; xem bảng dưới.
+
+Bật: `PROVIDER=agy` (dùng riêng agy), hoặc thêm vào `ENSEMBLE_PROVIDERS=gemini,agy` (agy trả lời song song với Gemini, rồi tổng hợp).
+
+| Cài đặt (`.env`) | Ý nghĩa |
+|---|---|
+| `AGY_CMD=agy` | Tên lệnh, hoặc đường dẫn đầy đủ tới `agy.exe` nếu không nằm trong PATH |
+| `AGY_MODEL=` | Model của agy (xem `agy models`); để trống = mặc định của agy |
+| `AGY_TIMEOUT=120` | Quá số giây này thì dừng agy và báo lỗi |
+
+Khác với gọi API: **chậm hơn** (agy khởi động cả một agent), **không hiện từng chữ** (chờ có cả câu mới hiện), và ảnh được lưu thành file trong một thư mục tạm rồi nhờ agy mở ra xem (thư mục tạm xóa ngay sau khi xong). Prompt dặn agy không sửa file hay chạy lệnh, nhưng đây là một agent có công cụ, không phải API thuần.
+
 ## 5. Khung trong suốt
 
 | Kiểu | Cách bật | Kết quả |
